@@ -14,22 +14,7 @@ from backend.services.simulation_service import SimulationService
 
 # --- 設定頁面 ---
 st.set_page_config(page_title="溫室環境決策系統 V7.0 (MVC版)", page_icon="🌿", layout="wide")
-import streamlit as st
-import pandas as pd
 
-
-
-# 呼叫函數讀取資料
-df = load_data_from_drive()
-
-if df is not None:
-    st.success("資料讀取成功！")
-    # 這裡可以開始寫您的圖表或計算邏輯
-    st.dataframe(df.head()) # 顯示前幾筆資料給您檢查
-else:
-    st.warning("目前沒有資料顯示")
-
-# ... 您的其他程式碼 ...
 # ==========================================
 # 1. 系統初始化 (實例化服務並讀取資料)
 # ==========================================
@@ -641,6 +626,4 @@ with tab4:
             with st.expander("查看詳細數據表"):
                 st.dataframe(df_opt.style.format("{:,.0f}"))
         else:
-
             st.info("👈 請調整左側成本參數，並點擊按鈕開始分析。")
-
