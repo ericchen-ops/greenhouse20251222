@@ -1,0 +1,7 @@
+streamlit
+pandas
+plotly
+selenium
+webdriver-manager
+requests
+lxml
