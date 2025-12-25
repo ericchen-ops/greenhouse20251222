@@ -18,8 +18,6 @@ st.set_page_config(page_title="溫室環境決策系統 V7.0 ", page_icon="🌿"
 # ==========================================
 # 1. 系統初始化 (實例化服務並讀取資料)
 # ==========================================
-
-# 初始化服務 (Service Instantiation)
 # 這裡定義資料夾路徑，讓 Service 知道去哪裡抓資料
 climate_svc = ClimateService(base_folder='data/weather_data')
 resource_svc = ResourceService(data_root='data')
@@ -98,7 +96,7 @@ with tab1:
         name="日射量 (W/m²)",
         marker_color='orange',
         opacity=0.5
-    ), secondary_y=False)
+    ), secondary_y=True)
 
     
     fig.add_trace(go.Scatter(
@@ -106,21 +104,21 @@ with tab1:
         y=df_clim['MaxTemp'],
         name="最高溫",
         line=dict(color='#ef4444', dash='dot', width=2)
-    ), secondary_y=True)
+    ), secondary_y=False)
 
     fig.add_trace(go.Scatter(
         x=df_clim['Month'],
         y=df_clim['MinTemp'],
         name="最低溫",
         line=dict(color='#3b82f6', dash='dot', width=2)
-    ), secondary_y=True)
+    ), secondary_y=False)
 
     fig.add_trace(go.Scatter(
         x=df_clim['Month'],
         y=df_clim['Temp'],
         name="平均氣溫",
         line=dict(color='#f59e0b', width=3) 
-    ), secondary_y=True)
+    ), secondary_y=False)
 
 
     fig.update_layout(
@@ -668,6 +666,7 @@ with tab4:
                 st.dataframe(df_opt.style.format("{:,.0f}"))
         else:
             st.info("👈 請調整左側成本參數，並點擊按鈕開始分析。")
+
 
 
 
