@@ -413,6 +413,8 @@ with tab3:
 # --- Tab 4: 設備最佳化 ---
 with tab4:
     st.subheader("⚖️ 設備最佳化：邊際效益分析")
+    
+    # 0. 防呆檢查
     if 'gh_specs' not in st.session_state:
         st.warning("⚠️ 請先至「Tab 2: 內部微氣候」完成規格設定。")
         st.stop()
@@ -420,11 +422,18 @@ with tab4:
     gh_specs = st.session_state.gh_specs
     fan_specs = st.session_state.fan_specs
     
-    st.markdown("#### 🎯 選擇要最佳化的系統")
-    target_sys = st.radio("請選擇分析對象", ["負壓風扇 (Fans)", "內遮蔭 (Shading)", "天窗面積 (Vents)", "噴霧系統 (Fogging)"], horizontal=True)
+    # 1. 分析目標選擇
+    st.markdown("#### 🎯 選擇要最佳化的系統 (變動因子)")
+    target_sys = st.radio(
+        "請選擇分析對象", 
+        ["負壓風扇 (Fans)", "內遮蔭 (Shading)", "天窗面積 (Vents)", "噴霧系統 (Fogging)"], 
+        horizontal=True
+    )
     st.markdown("---")
+    
     col_opt1, col_opt2 = st.columns([1, 2.5])
     
+    # --- 左側：參數設定與固定條件顯示 ---
     with col_opt1:
         st.markdown("### ⚙️ 成本與運轉參數")
         run_hours = st.number_input("年運轉時數 (hr)", value=3000, step=100)
@@ -434,6 +443,7 @@ with tab4:
         x_label = ""
         capex_per_unit = 0; opex_per_unit = 0
         
+        # 根據選擇設定變動參數
         if "Fans" in target_sys:
             fan_power = st.session_state.get('sel_fan_power', 1000.0)
             unit_price = st.number_input("風扇單價 ($/台)", value=15000, step=1000)
@@ -461,6 +471,37 @@ with tab4:
             sys_price = st.number_input("系統造價攤提 ($/單位流量/年)", value=10.0)
             sim_range = range(0, 600, 20); x_label = "噴霧流量 (g/m²/hr)"
 
+        # ==========================================
+        # ★ [新增] 顯示目前固定條件 (Context)
+        # ==========================================
+        st.markdown("---")
+        st.markdown("#### 🔒 模擬背景 (其餘固定條件)")
+        st.caption("以下參數將維持不變，僅變動上方選擇的系統：")
+        
+        with st.container(border=True):
+            # 1. 顯示排風扇 (如果不是正在分析它)
+            if "Fans" not in target_sys:
+                st.markdown(f"**💨 排風扇數量:** `{fan_specs['exhaustCount']} 台`")
+            
+            # 2. 顯示遮蔭 (如果不是正在分析它)
+            if "Shading" not in target_sys:
+                st.markdown(f"**☂️ 內遮蔭率:** `{gh_specs['shadingScreen']}%`")
+            
+            # 3. 顯示天窗 (如果不是正在分析它)
+            if "Vents" not in target_sys:
+                st.markdown(f"**🪟 天窗面積:** `{gh_specs['roofVentArea']} m²`")
+            
+            # 4. 顯示噴霧 (如果不是正在分析它)
+            if "Fogging" not in target_sys:
+                # 這裡要小心 key 可能不存在
+                curr_fog = gh_specs.get('_fog_capacity', 0)
+                st.markdown(f"**💦 噴霧流量:** `{curr_fog} g/m²/hr`")
+                
+            # 5. 顯示結構基本資訊
+            st.markdown("---")
+            st.markdown(f"**🏠 溫室尺寸:** `{gh_specs['width']}x{gh_specs['length']}x{gh_specs['gutterHeight']}m`")
+
+    # --- 右側：執行運算與繪圖 (保持不變) ---
     with col_opt2:
         if st.button("🚀 開始最佳化運算", type="primary", use_container_width=True):
             results = []
@@ -509,3 +550,4 @@ with tab4:
             fig_opt.update_yaxes(title_text="金額 ($)", secondary_y=False); fig_opt.update_yaxes(title_text="產量 (kg)", secondary_y=True, showgrid=False)
             st.plotly_chart(fig_opt, use_container_width=True)
             with st.expander("查看詳細數據表"): st.dataframe(df_opt.style.format("{:,.0f}"))
+
