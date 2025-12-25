@@ -85,75 +85,75 @@ with tab1:
     # 2. 版面配置
     col1, col2 = st.columns([1, 1.5]) 
     
-with col1:
-    st.markdown("##### 全年氣候趨勢圖")
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
+    with col1:
+        st.markdown("##### 全年氣候趨勢圖")
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    fig.add_trace(go.Bar(
-        x=df_clim['Month'],
-        y=df_clim['Solar_W'],
-        name="日射量 (W/m²)",
-        marker_color='orange',
-        opacity=0.5
-    ), secondary_y=False)
-
+        
+        fig.add_trace(go.Bar(
+            x=df_clim['Month'],
+            y=df_clim['Solar_W'],
+            name="日射量 (W/m²)",
+            marker_color='orange',
+            opacity=0.5
+        ), secondary_y=False)
     
-    fig.add_trace(go.Scatter(
-        x=df_clim['Month'],
-        y=df_clim['MaxTemp'],
-        name="最高溫",
-        line=dict(color='#ef4444', dash='dot', width=2)
-    ), secondary_y=True)
-
-    fig.add_trace(go.Scatter(
-        x=df_clim['Month'],
-        y=df_clim['MinTemp'],
-        name="最低溫",
-        line=dict(color='#3b82f6', dash='dot', width=2)
-    ), secondary_y=True)
-
-    fig.add_trace(go.Scatter(
-        x=df_clim['Month'],
-        y=df_clim['Temp'],
-        name="平均氣溫",
-        line=dict(color='#f59e0b', width=3) 
-    ), secondary_y=True)
-
-
-    fig.update_layout(
-        height=450,
-        template="plotly_dark",
-        hovermode="x unified",
-        legend=dict(orientation="h", y=1.1, x=0.5, xanchor='center'),
-        margin=dict(l=10, r=10, t=50, b=10),
-
-        # X 軸設定 (假設你的 Month 是數字 1-12)
-        xaxis=dict(
-            title="月份",
-            tickmode='linear',
-            dtick=1,
-            range=[0.5, 12.5]
-        ),
-
-      
-        # 左側 Y 軸 (主軸)：顯示日射量
-        yaxis=dict(
-            title="日射量 (W/m²)",
-            showgrid=True,
-        ),
-        # 右側 Y 軸 (副軸)：顯示溫度
-        yaxis2=dict(
-            title="溫度 (°C)",
-            showgrid=False, 
-            overlaying='y',
-            side='right'
+        
+        fig.add_trace(go.Scatter(
+            x=df_clim['Month'],
+            y=df_clim['MaxTemp'],
+            name="最高溫",
+            line=dict(color='#ef4444', dash='dot', width=2)
+        ), secondary_y=True)
+    
+        fig.add_trace(go.Scatter(
+            x=df_clim['Month'],
+            y=df_clim['MinTemp'],
+            name="最低溫",
+            line=dict(color='#3b82f6', dash='dot', width=2)
+        ), secondary_y=True)
+    
+        fig.add_trace(go.Scatter(
+            x=df_clim['Month'],
+            y=df_clim['Temp'],
+            name="平均氣溫",
+            line=dict(color='#f59e0b', width=3) 
+        ), secondary_y=True)
+    
+    
+        fig.update_layout(
+            height=450,
+            template="plotly_dark",
+            hovermode="x unified",
+            legend=dict(orientation="h", y=1.1, x=0.5, xanchor='center'),
+            margin=dict(l=10, r=10, t=50, b=10),
+    
+            # X 軸設定 (假設你的 Month 是數字 1-12)
+            xaxis=dict(
+                title="月份",
+                tickmode='linear',
+                dtick=1,
+                range=[0.5, 12.5]
+            ),
+    
+          
+            # 左側 Y 軸 (主軸)：顯示日射量
+            yaxis=dict(
+                title="日射量 (W/m²)",
+                showgrid=True,
+            ),
+            # 右側 Y 軸 (副軸)：顯示溫度
+            yaxis2=dict(
+                title="溫度 (°C)",
+                showgrid=False, 
+                overlaying='y',
+                side='right'
+            )
         )
-    )
-    st.plotly_chart(fig, use_container_width=True)
-       
-    # --- 右側：氣溫與輻射量分布 ---
-with col2:
+        st.plotly_chart(fig, use_container_width=True)
+           
+        # --- 右側：氣溫與輻射量分布 ---
+    with col2:
         st.markdown("##### 氣溫與日射量分布 ")
         scatter_points = []
         np.random.seed(42)
@@ -667,6 +667,7 @@ with tab4:
                 st.dataframe(df_opt.style.format("{:,.0f}"))
         else:
             st.info("👈 請調整左側成本參數，並點擊按鈕開始分析。")
+
 
 
 
