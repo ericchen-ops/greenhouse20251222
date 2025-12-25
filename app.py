@@ -13,7 +13,7 @@ from backend.services.market_service import MarketService
 from backend.services.simulation_service import SimulationService
 
 # --- 設定頁面 ---
-st.set_page_config(page_title="溫室環境決策系統 V7.0 (MVC版)", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="溫室環境決策系統 V7.0 ", page_icon="🌿", layout="wide")
 
 # ==========================================
 # 1. 系統初始化 (實例化服務並讀取資料)
@@ -627,4 +627,5 @@ with tab4:
                 st.dataframe(df_opt.style.format("{:,.0f}"))
         else:
             st.info("👈 請調整左側成本參數，並點擊按鈕開始分析。")
+
 
