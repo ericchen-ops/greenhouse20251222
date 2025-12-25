@@ -425,7 +425,7 @@ with tab4:
     # 1. 分析目標選擇
     st.markdown("#### 🎯 選擇要最佳化的系統 (變動因子)")
     target_sys = st.radio(
-        "請選擇分析對象", 
+        "請選擇分析對象:建議順序，確定天窗面積->噴霧系統->負壓扇數量，每個項目數值確定後，到tab2調整數值，再接著選下一項目", 
         ["負壓風扇 (Fans)", "內遮蔭 (Shading)", "天窗面積 (Vents)", "噴霧系統 (Fogging)"], 
         horizontal=True
     )
@@ -550,4 +550,5 @@ with tab4:
             fig_opt.update_yaxes(title_text="金額 ($)", secondary_y=False); fig_opt.update_yaxes(title_text="產量 (kg)", secondary_y=True, showgrid=False)
             st.plotly_chart(fig_opt, use_container_width=True)
             with st.expander("查看詳細數據表"): st.dataframe(df_opt.style.format("{:,.0f}"))
+
 
