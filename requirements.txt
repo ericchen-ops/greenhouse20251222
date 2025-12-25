@@ -5,3 +5,5 @@ selenium
 webdriver-manager
 requests
 lxml
+folium
+streamlit-folium
