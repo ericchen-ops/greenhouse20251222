@@ -20,66 +20,53 @@ class ClimateService:
     # ... (在 ClimateService 類別中) ...
 
     def analyze_advanced_light(self, filename, transmittance_percent=100):
-        """
-        讀取氣象局原始 CSV，計算進階光環境指標 (PPFD, DLI, Wh)
-        :param filename: 原始 CSV 檔名
-        :param transmittance_percent: 透光率 (100=室外, <100=室內)
-        :return: 處理好、包含所有指標的 DataFrame
-        """
-        # 1. 組合路徑 (支援多種位置搜尋)
-        possible_paths = [
-            os.path.join(self.base_folder, filename), # data/weather_data/xxx.csv
-            os.path.join('data', filename),           # data/xxx.csv
-            filename                                  # xxx.csv
-        ]
+        # 1. 精準組合路徑
+        # self.base_folder 應該是 'data/weather_data'
+        target_path = os.path.join(self.base_folder, filename)
         
-        target_path = None
-        for p in possible_paths:
-            if os.path.exists(p):
-                target_path = p
-                break
-        
-        if not target_path:
-            return None # 找不到檔案
+        print(f"🕵️‍♀️ 正在尋找光環境檔案: {target_path}") # Debug 用訊息
+
+        if not os.path.exists(target_path):
+            print(f"❌ 找不到檔案！請確認檔案是否位於: {os.path.abspath(target_path)}")
+            return None
 
         try:
-            # 2. 讀取原始數據 (封裝髒活：處理 header=1 和結尾逗號)
-            # 氣象局格式：第2行才是標題，只取時間(col 1)和日射量(col 13)
-            df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
-            df.columns = ['Time', 'Raw_MJ'] # 重新命名
+            # 2. 嘗試讀取 (CWA 氣象局格式：標題在第 2 行，header=1)
+            # 先試 CP950 (Big5)，這是氣象局 CSV 最常見的編碼
+            try:
+                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='cp950')
+            except UnicodeDecodeError:
+                print("⚠️ CP950 讀取失敗，嘗試 UTF-8...")
+                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
+
+            # 3. 重新命名欄位 (觀測時間, 全天空日射量)
+            df.columns = ['Time', 'Raw_MJ']
             
-            # 3. 數據清洗
+            # 4. 數據清洗
             df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
             df = df.dropna(subset=['Time'])
             df['Raw_MJ'] = pd.to_numeric(df['Raw_MJ'], errors='coerce').fillna(0)
             
-            # 4. 核心運算 (Backend 負責物理轉換)
+            # 5. 核心運算 (MJ -> Wh, PPFD, DLI)
             ratio = transmittance_percent / 100.0
             
-            # 基礎值 (MJ/m²)
+            # 基礎值
             df['Val_MJ'] = df['Raw_MJ'] * ratio
-            
-            # 轉換值
-            # 1 MJ = 277.78 Wh
-            df['Val_Wh'] = df['Val_MJ'] * 277.78
-            
-            # 1 MJ (Solar) ≈ 571.2 umol (PPFD) (寬頻光譜估算值)
-            df['Val_PPFD'] = df['Val_MJ'] * 571.2
-            
-            # DLI 貢獻量 (每小時) = PPFD * 3600秒 / 1,000,000 (轉mol)
-            # 簡化公式: 1 MJ ≈ 2.056 mol (PAR)
-            df['Val_DLI_Hr'] = df['Val_MJ'] * 2.056
+            df['Val_Wh'] = df['Val_MJ'] * 277.78       # MJ -> Wh
+            df['Val_PPFD'] = df['Val_MJ'] * 571.2      # MJ -> PPFD (umol)
+            df['Val_DLI_Hr'] = df['Val_MJ'] * 2.056    # MJ -> DLI (mol) 貢獻量
 
-            # 補上時間特徵 (方便前端繪圖)
+            # 時間特徵
             df['Date'] = df['Time'].dt.date.astype(str)
             df['Hour'] = df['Time'].dt.hour
             
+            print(f"✅ 成功讀取並分析：{filename} (共 {len(df)} 筆)")
             return df
             
         except Exception as e:
-            print(f"光環境分析錯誤: {e}")
+            print(f"❌ 光環境分析發生錯誤: {e}")
             return None
-
+        
     def scan_and_load_weather_data(self):
         """
         [完整邏輯補完] 讀取氣象資料並計算月統計數據 (Tab 1 專用)
