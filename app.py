@@ -178,6 +178,84 @@ with tab1:
         # 關鍵修正：防止地圖縮放時重跑
         st_folium(m, width=1000, height=500, use_container_width=True, returned_objects=[])
 
+
+    st.markdown("---")
+    st.subheader("☀️ 進階光環境與 DLI 分析 (原始數據版)")
+    
+    # 1. 控制面板 (UI)
+    c_set1, c_set2 = st.columns([1, 2])
+    
+    with c_set1:
+        st.markdown("#### ⚙️ 模擬參數")
+        env_mode = st.radio("觀測情境", ["室外 (Outdoor)", "室內 (Indoor)"], horizontal=True)
+        
+        # UI 邏輯
+        trans_rate = 100
+        if env_mode == "室內 (Indoor)":
+            trans_rate = st.slider("溫室透光率 (%)", 10, 100, 50, step=5)
+            
+    with c_set2:
+        st.markdown("#### 📊 視覺化指標")
+        metric = st.selectbox("選擇顯示數據", [
+            "PPFD (光合作用光量子通量)", 
+            "DLI (日累積光量)", 
+            "輻射量 (Wh/m²)", 
+            "輻射量 (MJ/m²)"
+        ])
+
+    # 2. 呼叫後端服務 (Logic & Calculation)
+    # 前端完全不碰 pd.read_csv 或數學公式
+    target_csv = "12Q970_東港工作站.csv"
+    df_adv = climate_svc.analyze_advanced_light(target_csv, transmittance_percent=trans_rate)
+
+    # 3. 繪圖 (View)
+    if df_adv is not None and not df_adv.empty:
+        
+        # 決定要畫哪個欄位 (Mapping)
+        # 這些欄位名稱都已經在 Backend 生成好了
+        plot_config = {
+            "PPFD": {"col": "Val_PPFD", "unit": "μmol/m²/s", "color": "Greens"},
+            "Wh":   {"col": "Val_Wh",   "unit": "Wh/m²",       "color": "Oranges"},
+            "MJ":   {"col": "Val_MJ",   "unit": "MJ/m²",       "color": "YlOrRd"},
+            "DLI":  {"col": "Val_DLI_Hr", "unit": "mol/m²/hr", "color": "Teal"}
+        }
+        
+        # 簡單的關鍵字比對來決定 config
+        curr_cfg = plot_config["MJ"] # 預設
+        for k in plot_config:
+            if k in metric: curr_cfg = plot_config[k]; break
+            
+        target_col = curr_cfg["col"]
+        unit = curr_cfg["unit"]
+        
+        # --- [圖表 A] DLI 日總量 Bar Chart ---
+        if "DLI" in metric or "PPFD" in metric:
+            # 即使是 Groupby 加總，嚴格來說也可以放在 Backend 做
+            # 但這裡屬於「視覺化聚合」，在前端做尚可接受
+            df_daily = df_adv.groupby('Date')['Val_DLI_Hr'].sum().reset_index()
+            
+            st.markdown(f"##### 🥬 {env_mode} - 每日 DLI (日累積光量)")
+            fig_dli = go.Figure()
+            fig_dli.add_trace(go.Bar(x=df_daily['Date'], y=df_daily['DLI_Total'] if 'DLI_Total' in df_daily else df_daily['Val_DLI_Hr'], marker_color='#10b981', name='DLI'))
+            fig_dli.add_hline(y=12, line_dash="dot", annotation_text="低標 (12)", annotation_position="top right")
+            fig_dli.update_layout(height=280, template="plotly_dark", yaxis_title="mol/m²/day", margin=dict(l=40, r=40, t=30, b=10))
+            st.plotly_chart(fig_dli, use_container_width=True)
+
+        # --- [圖表 B] 小時熱力圖 ---
+        st.markdown(f"##### 🔥 {metric} - 全年時段指紋圖")
+        heatmap_data = df_adv.pivot_table(index='Date', columns='Hour', values=target_col, aggfunc='mean')
+        
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=heatmap_data.values, x=heatmap_data.columns, y=heatmap_data.index,
+            colorscale=curr_cfg["color"], colorbar=dict(title=unit),
+            hovertemplate='日期: %{y}<br>時間: %{x}:00<br>數值: %{z:.1f} ' + unit + '<extra></extra>'
+        ))
+        fig_heat.update_layout(height=500, template="plotly_dark", xaxis=dict(title="時間", dtick=2), yaxis=dict(autorange='reversed'))
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+    else:
+        st.warning(f"無法分析光環境，請確認 `{target_csv}` 是否存在於 data 資料夾。")
+
 # --- Tab 2: 室內氣候 ---
 with tab2:
     st.subheader("🏠 溫室內部環境模擬")

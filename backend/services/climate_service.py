@@ -17,6 +17,69 @@ class ClimateService:
         self.base_folder = base_folder
         self.psy_model = PsychroModel(p_atm_kpa=101.325)
 
+    # ... (在 ClimateService 類別中) ...
+
+    def analyze_advanced_light(self, filename, transmittance_percent=100):
+        """
+        讀取氣象局原始 CSV，計算進階光環境指標 (PPFD, DLI, Wh)
+        :param filename: 原始 CSV 檔名
+        :param transmittance_percent: 透光率 (100=室外, <100=室內)
+        :return: 處理好、包含所有指標的 DataFrame
+        """
+        # 1. 組合路徑 (支援多種位置搜尋)
+        possible_paths = [
+            os.path.join(self.base_folder, filename), # data/weather_data/xxx.csv
+            os.path.join('data', filename),           # data/xxx.csv
+            filename                                  # xxx.csv
+        ]
+        
+        target_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                target_path = p
+                break
+        
+        if not target_path:
+            return None # 找不到檔案
+
+        try:
+            # 2. 讀取原始數據 (封裝髒活：處理 header=1 和結尾逗號)
+            # 氣象局格式：第2行才是標題，只取時間(col 1)和日射量(col 13)
+            df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
+            df.columns = ['Time', 'Raw_MJ'] # 重新命名
+            
+            # 3. 數據清洗
+            df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+            df = df.dropna(subset=['Time'])
+            df['Raw_MJ'] = pd.to_numeric(df['Raw_MJ'], errors='coerce').fillna(0)
+            
+            # 4. 核心運算 (Backend 負責物理轉換)
+            ratio = transmittance_percent / 100.0
+            
+            # 基礎值 (MJ/m²)
+            df['Val_MJ'] = df['Raw_MJ'] * ratio
+            
+            # 轉換值
+            # 1 MJ = 277.78 Wh
+            df['Val_Wh'] = df['Val_MJ'] * 277.78
+            
+            # 1 MJ (Solar) ≈ 571.2 umol (PPFD) (寬頻光譜估算值)
+            df['Val_PPFD'] = df['Val_MJ'] * 571.2
+            
+            # DLI 貢獻量 (每小時) = PPFD * 3600秒 / 1,000,000 (轉mol)
+            # 簡化公式: 1 MJ ≈ 2.056 mol (PAR)
+            df['Val_DLI_Hr'] = df['Val_MJ'] * 2.056
+
+            # 補上時間特徵 (方便前端繪圖)
+            df['Date'] = df['Time'].dt.date.astype(str)
+            df['Hour'] = df['Time'].dt.hour
+            
+            return df
+            
+        except Exception as e:
+            print(f"光環境分析錯誤: {e}")
+            return None
+
     def scan_and_load_weather_data(self):
         """
         [完整邏輯補完] 讀取氣象資料並計算月統計數據 (Tab 1 專用)
