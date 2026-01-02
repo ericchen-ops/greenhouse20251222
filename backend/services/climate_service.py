@@ -2,29 +2,25 @@ import pandas as pd
 import os
 import sys
 
-# ==========================================
-# [新增] 自動將專案根目錄加入 Python 搜尋路徑
-# 這樣 Python 才找得到 "backend" 這個資料夾
-# ==========================================
-current_dir = os.path.dirname(os.path.abspath(__file__)) # 取得目前檔案位置 (services)
-parent_dir = os.path.dirname(current_dir)                # 取得上一層 (backend)
-project_root = os.path.dirname(parent_dir)               # 取得根目錄 (greenhouse20251222)
-
+# --- 路徑導航 (確保找得到 backend) ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+project_root = os.path.dirname(parent_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
-# ==========================================
 
-from backend.models.psychrometrics import PsychroModel 
+# 引用物理模型
+from backend.models.psychrometrics import PsychroModel
 
 class ClimateService:
     def __init__(self, base_folder='data/weather_data'):
-        # 注意：這裡的路徑可能要根據您 app.py 的位置調整，通常是 data/weather_data
         self.base_folder = base_folder
-        # 初始化物理模型
         self.psy_model = PsychroModel(p_atm_kpa=101.325)
 
     def scan_and_load_weather_data(self):
-        """(這個函式負責月報表讀取，保持原樣即可，不需物理運算)"""
+        """
+        [完整邏輯補完] 讀取氣象資料並計算月統計數據 (Tab 1 專用)
+        """
         loaded_locations = {}
         if not os.path.exists(self.base_folder): return {}
 
@@ -32,15 +28,95 @@ class ClimateService:
         for f in files:
             path = os.path.join(self.base_folder, f)
             try:
-                # ... (省略原本的 scan 邏輯，與之前相同，只要複製過來即可) ...
-                # 為了版面整潔，這裡假設您會保留原本 scan_and_load_weather_data 的內容
-                # 重點是下面的 read_hourly_data
-                pass 
+                # 1. 抓取測站名稱
+                station_name = f.split('.')[0]
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as file:
+                        if '測站' in file.readline():
+                            parts = file.readline().split(',')
+                            if len(parts) > 1: station_name = parts[1].strip()
+                except: pass
+
+                # 2. 讀取 CSV
+                try: df = pd.read_csv(path, header=1, encoding='utf-8', on_bad_lines='skip')
+                except: 
+                    try: df = pd.read_csv(path, header=1, encoding='big5', on_bad_lines='skip')
+                    except: df = pd.read_csv(path, header=0, encoding='utf-8', on_bad_lines='skip')
+
+                df.columns = [c.strip() for c in df.columns]
+                
+                # 3. 欄位對照
+                col_map = {}
+                for c in df.columns:
+                    if '時間' in c or 'Time' in c: col_map['time'] = c
+                    elif '氣溫' in c or 'Temp' in c: col_map['temp'] = c
+                    elif '濕度' in c or 'RH' in c: col_map['rh'] = c
+                    elif '風速' in c or 'Wind' in c: col_map['wind'] = c
+                    elif '日射' in c or 'Solar' in c: col_map['solar'] = c
+
+                if 'time' not in col_map: continue 
+
+                df['Date'] = pd.to_datetime(df[col_map['time']], errors='coerce')
+                df = df.dropna(subset=['Date'])
+                df['Month'] = df['Date'].dt.month
+                
+                for k, col in col_map.items():
+                    if k != 'time': df[col] = pd.to_numeric(df[col], errors='coerce')
+
+                # 4. [關鍵] 統計運算 (這裡一定要產生 maxTemps 等欄位)
+                data_dict = {'months': list(range(1, 13)), 'temps': [], 'maxTemps': [], 'minTemps': [], 'humidities': [], 'solar': [], 'wind': [], 'marketPrice': [30]*12}
+
+                # 判斷資料量 (月資料 vs 時資料)
+                if len(df) <= 24: 
+                    monthly_grp = df.groupby('Month')
+                    for m in range(1, 13):
+                        if m in monthly_grp.groups:
+                            g = monthly_grp.get_group(m)
+                            data_dict['temps'].append(float(g[col_map['temp']].mean()))
+                            
+                            # 抓取最高/最低溫
+                            max_c = next((c for c in df.columns if '最高' in c and '溫' in c), col_map['temp'])
+                            min_c = next((c for c in df.columns if '最低' in c and '溫' in c), col_map['temp'])
+                            data_dict['maxTemps'].append(float(g[max_c].max()))
+                            data_dict['minTemps'].append(float(g[min_c].min()))
+                            
+                            data_dict['humidities'].append(float(g[col_map.get('rh', col_map['temp'])].mean()))
+                            data_dict['wind'].append(float(g[col_map.get('wind', col_map['temp'])].mean()))
+                            
+                            if 'solar' in col_map:
+                                val = g[col_map['solar']].mean()
+                                if val > 50: val /= 30 
+                                data_dict['solar'].append(float(val))
+                            else: data_dict['solar'].append(12.0)
+                        else:
+                            for k in ['temps','maxTemps','minTemps','humidities','solar','wind']: data_dict[k].append(0)
+                else: 
+                     for m in range(1, 13):
+                        g = df[df['Month'] == m]
+                        if not g.empty:
+                            data_dict['temps'].append(float(g[col_map['temp']].mean()))
+                            # 時資料統計 Max/Min
+                            data_dict['maxTemps'].append(float(g[col_map['temp']].max()))
+                            data_dict['minTemps'].append(float(g[col_map['temp']].min()))
+                            
+                            data_dict['humidities'].append(float(g[col_map.get('rh', col_map['temp'])].mean()))
+                            data_dict['wind'].append(float(g[col_map.get('wind', col_map['temp'])].mean()))
+                            
+                            if 'solar' in col_map:
+                                daily_s = g.groupby(g['Date'].dt.date)[col_map['solar']].sum()
+                                data_dict['solar'].append(float(daily_s.mean()))
+                            else: data_dict['solar'].append(12.0)
+                        else:
+                            for k in ['temps','maxTemps','minTemps','humidities','solar','wind']: data_dict[k].append(0)
+
+                loaded_locations[station_name] = {'id': station_name, 'name': station_name, 'description': f'File: {f}', 'data': data_dict}
             except: continue
-        return loaded_locations # 這裡記得要放回原本的邏輯
+        return loaded_locations
 
     def read_hourly_data(self, filename):
-        """讀取詳細時報表 (並呼叫 PsychroModel 進行運算)"""
+        """
+        讀取詳細時報表 (並呼叫 PsychroModel 進行運算)
+        """
         path = os.path.join(self.base_folder, filename)
         if not os.path.exists(path): return None
         try:
@@ -65,7 +141,7 @@ class ClimateService:
             df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
             df = df.dropna(subset=['Time'])
             
-            # 3. 物理運算 (使用新的 ASAE 方法名稱)
+            # 3. 物理運算 (使用 ASAE 方法)
             results = []
             for index, row in df.iterrows():
                 try:
@@ -76,7 +152,7 @@ class ClimateService:
                     p_atm_hpa = float(row.get('Press', 1013.25))
                     self.psy_model.P_atm = p_atm_hpa / 10.0 
                     
-                    # [修改] 呼叫 ASAE 方法
+                    # 呼叫 ASAE 方法
                     pw = self.psy_model.get_partial_vapor_pressure(t, rh)
                     vpd = self.psy_model.get_vpd(t, rh)
                     w = self.psy_model.get_humidity_ratio(pw)
