@@ -9,32 +9,28 @@ import folium
 from streamlit_folium import st_folium
 import sys 
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import math
-import os
-import folium
-from streamlit_folium import st_folium
-import sys 
-
-# 設定寬版模式 (解決擠成一團的問題)
-
+# ==========================================
+# 1. 頁面設定 (必須在所有程式碼的最上面)
+# ==========================================
 st.set_page_config(
     page_title="溫室環境決策系統 V7.1", 
     page_icon="🌿", 
-    layout="wide" 
+    layout="wide"  # <--- 寬版模式：解決擠成一團的關鍵
 )
 
+# 加入 CSS 微調，減少頂部空白，讓畫面更滿版
 st.markdown("""
 <style>
-    .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-
+# 設定路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
@@ -46,20 +42,19 @@ from backend.services.market_service import MarketService
 from backend.services.simulation_service import SimulationService
 
 # ==========================================
-# 1. 系統初始化 (實例化服務)
+# 2. 系統初始化 (實例化服務)
 # ==========================================
 climate_svc = ClimateService(base_folder='data/weather_data')
 resource_svc = ResourceService(data_root='data')
 market_svc = MarketService(base_folder='data/market_data')
-
-# [新增] 實例化模擬服務
 sim_svc = SimulationService()
+
 # 透過服務載入資料
 CROP_DB = resource_svc.load_crop_database()
 WEATHER_DB = climate_svc.scan_and_load_weather_data()
 MARKET_DB = market_svc.scan_and_load_market_prices()
 
-# --- [新增] 讀取外部座標 CSV 並合併到 WEATHER_DB ---
+# --- 讀取外部座標 CSV 並合併到 WEATHER_DB ---
 gps_file_path = 'data/station_coords.csv'
 if os.path.exists(gps_file_path):
     try:
@@ -89,7 +84,7 @@ if not WEATHER_DB:
 if 'monthly_crops' not in st.session_state: st.session_state.monthly_crops = ['lettuce'] * 12
 if 'planting_density' not in st.session_state: st.session_state.planting_density = 25.0
 if 'annual_cycles' not in st.session_state: st.session_state.annual_cycles = 15.0
-if 'production_costs' not in st.session_state: st.session_state.production_costs = [15] * 12 # [新增] 成本預設值
+if 'production_costs' not in st.session_state: st.session_state.production_costs = [15] * 12
 
 # 標題區
 c1, c2 = st.columns([1, 4])
@@ -100,8 +95,9 @@ with c2: st.title("溫室模擬與環境分析系統 V7.1"); st.markdown("202512
 with st.sidebar:
     st.header("基礎設定")
     loc_options = list(WEATHER_DB.keys())
-    default_key = '12Q970_東港工作站' 
-    default_index = loc_options.index(default_key) if default_key in loc_options else 0
+    # 設定預設選項 (若有東港則預設東港)
+    default_key = next((k for k in loc_options if '東港' in k), loc_options[0] if loc_options else None)
+    default_index = loc_options.index(default_key) if default_key else 0
     
     loc_id = st.selectbox(
         "選擇模擬地區", 
@@ -114,7 +110,7 @@ with st.sidebar:
     if 'market_prices' not in st.session_state: st.session_state.market_prices = CURR_LOC['data']['marketPrice'].copy()
 
 # ==========================================
-# 2. 前端介面邏輯
+# 3. 前端介面邏輯 (Tabs)
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["1. 外部環境", "2. 內部微氣候", "3. 產能價格", "4. 邊際效益"])
 
@@ -172,7 +168,7 @@ with tab1:
         fig2.update_layout(height=450, template="plotly_dark", xaxis_title="氣溫 (°C)", yaxis_title="日射強度 (W/m²)", legend=dict(orientation="v", y=1, x=1.02), margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- [修正] 地圖區塊 (已加入 returned_objects=[]) ---
+    # --- 地圖區塊 ---
     st.markdown("---")
     st.subheader("🗺️ 氣象站地理位置分佈")
     with st.expander("點擊展開地圖", expanded=True):
@@ -201,20 +197,15 @@ with tab1:
                 icon=folium.Icon(color=icon_color, icon=icon_type)
             ).add_to(m)
             
-        # 關鍵修正：防止地圖縮放時重跑
         st_folium(m, width=1000, height=500, use_container_width=True, returned_objects=[])
 
-
-    # ... (Tab 1 上半部圖表與地圖保持不變) ...
-
+    # --- 光環境適性分析 (Tab 1 下半部) ---
     st.markdown("---")
     st.subheader(f"☀️ {CURR_LOC['name']} - 光環境適性分析 (月均值版)")
     
     # 1. 取得檔案路徑 (修復重點)
-    # 我們從 WEATHER_DB 直接拿掃描到的檔名，保證檔案一定存在
     target_filename = CURR_LOC.get('filename') 
     
-    # 如果資料庫裡沒存 filename (舊邏輯)，則嘗試去抓
     if not target_filename:
         current_id = str(CURR_LOC['id'])
         weather_folder = 'data/weather_data'
@@ -227,12 +218,10 @@ with tab1:
         # 2. 設定面板
         c_set1, c_set2 = st.columns([1, 2])
         
-        # 讀取作物資料
         crop_data = climate_svc.get_crop_light_requirements()
         
         with c_set1:
             st.markdown("#### ⚙️ 栽培設定")
-            
             sel_crop = st.selectbox("目標作物", list(crop_data.keys()))
             crop_req = crop_data[sel_crop]
             sat_point = crop_req['sat']
@@ -250,12 +239,12 @@ with tab1:
             if env_mode == "室內 (Indoor)":
                 trans_rate = st.slider("透光率 (%)", 10, 100, 50, step=5)
 
-        # 3. 呼叫後端運算 (傳入正確的檔名)
+        # 3. 呼叫後端運算
         matrix, dli_monthly = climate_svc.calculate_monthly_light_matrix(target_filename, transmittance_percent=trans_rate)
         
         if matrix is not None:
             with c_set2:
-                # --- [圖表 1] 月平均 DLI ---
+                # [圖表 1] 月平均 DLI
                 st.markdown("#### 📊 平均 DLI (日累積光量)")
                 fig_dli = go.Figure(go.Bar(
                     x=dli_monthly.index, y=dli_monthly.values,
@@ -266,7 +255,7 @@ with tab1:
                 fig_dli.update_layout(height=200, template="plotly_dark", margin=dict(l=20,r=20,t=20,b=10), xaxis=dict(title="月份", dtick=1), yaxis=dict(title="mol/m²/day"))
                 st.plotly_chart(fig_dli, use_container_width=True)
 
-            # --- [圖表 2] 三色熱力圖 ---
+            # [圖表 2] 三色熱力圖
             st.markdown("#### 🔥 全年光照適性指紋圖")
             st.caption(f"🎨 顏色說明：⬜ 灰色 < {comp_point} (無效) | 🟨 米黃色 (適當生長) | 🟥 紅色 > {sat_point} (過量/飽和)")
             
@@ -284,12 +273,11 @@ with tab1:
             ))
             fig_heat.update_layout(height=400, template="plotly_dark", xaxis=dict(title="時間", dtick=2), yaxis=dict(title="月份", dtick=1, autorange='reversed'), margin=dict(l=50,r=50,t=20,b=20))
             st.plotly_chart(fig_heat, use_container_width=True)
-            
         else:
             st.warning(f"⚠️ 讀取數據失敗：請確認 `{target_filename}` 格式是否正確。")
     else:
         st.warning(f"⚠️ 尚未上傳 **{CURR_LOC['name']}** 的原始氣象 CSV 檔。")
-        
+
 # --- Tab 2: 室內氣候 ---
 with tab2:
     st.subheader("🏠 溫室內部環境模擬")
@@ -353,7 +341,6 @@ with tab2:
     }
     fan_specs = {'exhaustCount': f_count, 'exhaustFlow': f_flow, 'circCount': c_count, 'circDistance': 15}
     st.session_state.gh_specs = gh_specs; st.session_state.fan_specs = fan_specs
-
 
     res = sim_svc.run_simulation(
         gh_specs, fan_specs, CURR_LOC['data'], 
@@ -668,6 +655,3 @@ with tab4:
             fig_opt.update_yaxes(title_text="金額 ($)", secondary_y=False); fig_opt.update_yaxes(title_text="產量 (kg)", secondary_y=True, showgrid=False)
             st.plotly_chart(fig_opt, use_container_width=True)
             with st.expander("查看詳細數據表"): st.dataframe(df_opt.style.format("{:,.0f}"))
-
-
-

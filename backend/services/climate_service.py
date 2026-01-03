@@ -6,11 +6,10 @@ class ClimateService:
     def __init__(self, base_folder='data/weather_data'):
         self.base_folder = base_folder
 
-    # --- 1. 掃描資料夾並讀取摘要 (Tab 1 上半部圖表用) ---
+    # 1. 掃描資料夾 (給 Tab 1 上方摘要用)
     def scan_and_load_weather_data(self):
         weather_db = {}
         if not os.path.exists(self.base_folder):
-            print(f"⚠️ 資料夾不存在: {self.base_folder}")
             return weather_db
         
         for f in os.listdir(self.base_folder):
@@ -20,7 +19,7 @@ class ClimateService:
                     loc_id = f.split('.')[0].split('_')[0] 
                     loc_name = f.split('.')[0]
                     
-                    # 讀取摘要數據 (這一步會修復 Tab 1 的圖)
+                    # 讀取摘要數據
                     summary_data = self._read_summary(path)
                     
                     weather_db[loc_id] = {
@@ -29,33 +28,23 @@ class ClimateService:
                         'data': summary_data,
                         'filename': f 
                     }
-                except Exception as e:
-                    print(f"Skipping {f}: {e}")
-                    continue
+                except: continue
         return weather_db
 
     def _read_summary(self, path):
-        """
-        讀取 CSV 並計算正確的「月統計值」給 Tab 1 繪圖
-        步驟：小時資料 -> 日統計 (加總/極值) -> 月平均
-        """
-        # 1. 預設值 (防止崩潰，但我們希望能讀到真實數據)
+        # 預設值
         default_data = {
             'months': list(range(1,13)),
             'temps': [25.0]*12, 'maxTemps': [30.0]*12, 'minTemps': [20.0]*12,
-            'solar': [12.0]*12, 'wind': [1.0]*12, 'humidities': [75.0]*12, 
-            'rain': [100.0]*12, 'marketPrice': [30.0]*12
+            'solar': [12.0]*12, 'wind': [1.0]*12, 'humidities': [75.0]*12, 'rain': [100.0]*12, 'marketPrice': [30.0]*12
         }
 
         try:
-            # 2. 讀取 CSV
-            try:
-                df = pd.read_csv(path, header=1, encoding='cp950')
-            except:
-                df = pd.read_csv(path, header=1, encoding='utf-8')
+            # 讀取
+            try: df = pd.read_csv(path, header=1, encoding='cp950')
+            except: df = pd.read_csv(path, header=1, encoding='utf-8')
 
-            # 3. 欄位對應 (關鍵：針對您的檔案格式)
-            # 您的檔案欄位是: 觀測時間, 氣溫(℃), 全天空日射量(MJ/m2), 平均風速(m/s), 相對濕度( %)
+            # 欄位對應
             col_time = next((c for c in df.columns if '觀測時間' in c or 'Time' in c), None)
             col_temp = next((c for c in df.columns if '氣溫' in c), None)
             col_solar = next((c for c in df.columns if '日射' in c), None)
@@ -63,74 +52,42 @@ class ClimateService:
             col_rh = next((c for c in df.columns if '濕度' in c), None)
 
             if col_time:
-                # 轉換時間並設為索引
                 df['Time'] = pd.to_datetime(df[col_time], errors='coerce')
                 df = df.dropna(subset=['Time'])
                 df.set_index('Time', inplace=True)
-                
-                # 轉換數值 (處理非數字字元)
                 for c in [col_temp, col_solar, col_wind, col_rh]:
                     if c: df[c] = pd.to_numeric(df[c], errors='coerce')
 
-                # ==========================================
-                # ★ 關鍵修正：先做「日統計」再做「月平均」
-                # ==========================================
-                
-                # 1. 重取樣為「日 (Day)」資料
-                # 氣溫：取每日平均、每日最高、每日最低
-                # 日射：取每日「總和」(Sum)，因為 MJ 是累積量
+                # ★ 日統計 -> 月平均
                 daily = df.resample('D').agg({
                     col_temp: ['mean', 'max', 'min'],
                     col_solar: 'sum',
                     col_wind: 'mean',
                     col_rh: 'mean'
                 })
-                
-                # 重新命名欄位方便操作
                 daily.columns = ['Temp_Mean', 'Temp_Max', 'Temp_Min', 'Solar_Sum', 'Wind_Mean', 'RH_Mean']
-                
-                # 加入月份欄位
                 daily['Month'] = daily.index.month
                 
-                # 2. 依「月份」分組取平均
-                monthly_grp = daily.groupby('Month').mean()
-                
-                # 3. 填入回傳資料 (確保有 1-12 月)
-                # reindex 確保即使資料只有幾個月，也能補齊 12 個月避免報錯
-                months_idx = range(1, 13)
-                monthly_grp = monthly_grp.reindex(months_idx)
+                monthly_grp = daily.groupby('Month').mean().reindex(range(1, 13))
 
-                # 填值 (使用 fillna 防呆)
                 if col_temp:
                     default_data['temps'] = monthly_grp['Temp_Mean'].fillna(25.0).tolist()
                     default_data['maxTemps'] = monthly_grp['Temp_Max'].fillna(30.0).tolist()
                     default_data['minTemps'] = monthly_grp['Temp_Min'].fillna(20.0).tolist()
-                
-                if col_solar:
-                    # 日射量這裡已經是「日總量的月平均」，單位 MJ/m2/day，非常適合繪圖
-                    default_data['solar'] = monthly_grp['Solar_Sum'].fillna(12.0).tolist()
-                    
-                if col_wind:
-                    default_data['wind'] = monthly_grp['Wind_Mean'].fillna(1.0).tolist()
-                    
-                if col_rh:
-                    default_data['humidities'] = monthly_grp['RH_Mean'].fillna(75.0).tolist()
+                if col_solar: default_data['solar'] = monthly_grp['Solar_Sum'].fillna(12.0).tolist()
+                if col_wind: default_data['wind'] = monthly_grp['Wind_Mean'].fillna(1.0).tolist()
+                if col_rh: default_data['humidities'] = monthly_grp['RH_Mean'].fillna(75.0).tolist()
 
-        except Exception as e: 
-            print(f"Error reading summary: {e}")
-            pass
-            
+        except: pass
         return default_data
 
-    # --- 2. 讀取 24 小時資料 (Tab 2 用) ---
+    # 2. 讀取小時資料 (Tab 2, Tab 1 熱力圖用)
     def read_hourly_data(self, filename):
         path = os.path.join(self.base_folder, filename)
         if not os.path.exists(path): return None
         try:
-            try:
-                df = pd.read_csv(path, header=1, usecols=[1, 4, 6, 7, 13], encoding='cp950')
-            except:
-                df = pd.read_csv(path, header=1, usecols=[1, 4, 6, 7, 13], encoding='utf-8')
+            try: df = pd.read_csv(path, header=1, usecols=[1, 4, 6, 7, 13], encoding='cp950')
+            except: df = pd.read_csv(path, header=1, usecols=[1, 4, 6, 7, 13], encoding='utf-8')
             
             df.columns = ['Time', 'Temp', 'RH', 'Wind', 'Solar']
             df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
@@ -139,7 +96,7 @@ class ClimateService:
             return df
         except: return None
 
-    # --- 3. 進階光環境分析 (Tab 1 下半部) ---
+    # 3. 進階光環境分析 (Tab 1 核心)
     def analyze_advanced_light(self, filename, transmittance_percent=100):
         target_path = os.path.join(self.base_folder, os.path.basename(filename))
         if not os.path.exists(target_path): 
@@ -147,10 +104,8 @@ class ClimateService:
             if not os.path.exists(target_path): return None
 
         try:
-            try:
-                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='cp950')
-            except:
-                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
+            try: df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='cp950')
+            except: df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
 
             df.columns = ['Time', 'Raw_MJ']
             df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
@@ -168,7 +123,7 @@ class ClimateService:
             return df
         except: return None
 
-    # --- 4. 讀取作物參數 ---
+    # 4. 讀取作物參數
     def get_crop_light_requirements(self):
         csv_path = os.path.join('data', 'crop_parameters.csv')
         default_crops = {'萵苣 (預設)': {'sat': 1100, 'comp': 40, 'dli': 14}}
@@ -187,7 +142,7 @@ class ClimateService:
             except: return default_crops
         return default_crops
 
-    # --- 5. 計算月平均矩陣 (Tab 1 繪圖用) ---
+    # 5. 計算矩陣
     def calculate_monthly_light_matrix(self, filename, transmittance_percent=100):
         df = self.analyze_advanced_light(filename, transmittance_percent)
         if df is None or df.empty: return None, None
