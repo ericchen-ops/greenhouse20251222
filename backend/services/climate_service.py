@@ -121,24 +121,39 @@ class ClimateService:
             return df
         except: return None
 
-    # 3. 進階光環境分析 (Tab 1 使用)
+    # 3. 進階光環境分析 (Tab 1 使用) - 已修復：改為自動抓取欄位名稱
     def analyze_advanced_light(self, filename, transmittance_percent=100):
         possible_paths = [os.path.join(self.base_folder, filename), os.path.join('data', filename), filename]
         target_path = next((p for p in possible_paths if os.path.exists(p)), None)
         
-        if not target_path: return None
+        if not target_path: 
+            print("找不到檔案")
+            return None
 
         try:
+            # 1. 先讀取全部欄位 (不要只讀 [1, 13])
             try:
-                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='cp950')
+                df = pd.read_csv(target_path, header=1, encoding='cp950')
             except:
-                df = pd.read_csv(target_path, header=1, usecols=[1, 13], encoding='utf-8')
+                df = pd.read_csv(target_path, header=1, encoding='utf-8')
 
+            # 2. 自動找「時間」和「日射量」在哪一欄
+            time_col = next((c for c in df.columns if '時間' in c or 'Time' in c), None)
+            solar_col = next((c for c in df.columns if '日射' in c or 'Solar' in c or 'MJ' in c), None)
+
+            if not time_col or not solar_col:
+                print(f"找不到關鍵欄位: Time={time_col}, Solar={solar_col}")
+                return None
+
+            # 3. 重新命名並整理
+            df = df[[time_col, solar_col]].copy()
             df.columns = ['Time', 'Raw_MJ']
+            
             df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
             df = df.dropna(subset=['Time'])
             df['Raw_MJ'] = pd.to_numeric(df['Raw_MJ'], errors='coerce').fillna(0)
             
+            # 4. 計算光環境數值
             ratio = transmittance_percent / 100.0
             df['Val_MJ'] = df['Raw_MJ'] * ratio
             df['Val_Wh'] = df['Val_MJ'] * 277.78
@@ -150,8 +165,10 @@ class ClimateService:
             df['Hour'] = df['Time'].dt.hour
             
             return df
-        except: return None
-
+        except Exception as e: 
+            print(f"分析失敗: {e}")
+            return None
+        
     # 4. 讀取作物參數
     def get_crop_light_requirements(self):
         csv_path = os.path.join('data', 'crop_parameters.csv')
