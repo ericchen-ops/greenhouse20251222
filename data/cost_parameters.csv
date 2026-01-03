@@ -1,18 +1,16 @@
 Type,Category,Item,Value,Unit,Description
 OPEX,Energy,Electricity_Rate,4.0,NTD/kWh,平均電費 (參考水電費用表_混合尖離峰)
-OPEX,Energy,Water_Rate,12.0,NTD/m3,自來水費單價
-OPEX,Energy,UndregroundWater_Rate,10.0,NTD/m3,地下水費用
+OPEX,Energy,Water_Rate,10.0,NTD/m3,用水費單價
 OPEX,Labor,Hourly_Wage_Worker,200,NTD/hr,一般操作工時薪 (含勞健保/以月薪35k換算)
 OPEX,Labor,Hourly_Wage_Manager,350,NTD/hr,場長/管理職時薪 (以月薪60k-70k換算)
-OPEX,Labor,Workers_Per_Ha,12,Person,每公頃標準配置人力 (參考人力需求表)
-OPEX,Material,Seed_Cost,0.8,NTD/seed,種子單價 (高規包衣種子)
-OPEX,Material,Substrate_Cost,2.5,NTD/pot,介質成本 (參考外購介質_泥炭土/椰纖)
+OPEX,Labor,Workers_Per_Ha,5,Person,每公頃標準配置人力 (參考人力需求表)
+OPEX,Material,Seed_Cost,0.005,NTD/seed,種子單價 (高規包衣種子)
+OPEX,Material,Substrate_Cost,0.3,NTD/pot,介質成本 (參考外購介質_泥炭土/椰纖)
 OPEX,Material,Nutrient_Cost,0.15,NTD/day/m2,液肥與營養液平均日耗損
 OPEX,Material,Packaging_Cost,2.0,NTD/unit,包裝耗材 (袋子/束帶)
 OPEX,Maintenance,Maint_Rate_Structure,0.01,%,結構年維護費率 (造價的1%)
 OPEX,Maintenance,Maint_Rate_Equipment,0.03,%,設備年維護費率 (造價的3%)
-OPEX,Waste,Waste_Disposal_Fee,3000,NTD/ton,廢棄物清運費 (參考堆肥/介質處理表)
-CAPEX,Structure,Greenhouse_Structure_Price,5500,NTD/m2,精密溫室主體結構 (含基礎/鋼構/綠能設施)
+CAPEX,Structure,Greenhouse_Structure_Price,5500,NTD/m2,太陽能溫室主體結構 (含基礎/鋼構/綠能設施)
 CAPEX,Structure,Vent_Structure_Price,3000,NTD/m2,天窗/側窗結構系統單價
 CAPEX,Equipment,Fan_Unit_Price,16000,NTD/unit,50吋負壓風扇 (含安裝工資)
 CAPEX,Equipment,Circulation_Fan_Price,4500,NTD/unit,內循環風扇
@@ -22,6 +20,6 @@ CAPEX,Equipment,Fog_System_Price,15,NTD/g/m2,高壓噴霧系統 (每單位流量
 CAPEX,Equipment,Irrigation_System_Price,80,NTD/m2,灌溉施肥系統 (Dosatron/Netafim等級)
 CAPEX,Equipment,Automation_System_Price,150,NTD/m2,環控電腦與感測器 (如Priva/Hoogendoorn)
 Depreciation,Life,Structure_Life_Year,20,Year,主體結構折舊年限
-Depreciation,Life,Fan_Life_Year,5,Year,風扇/馬達折舊年限
-Depreciation,Life,Net_Life_Year,3,Year,防蟲網/耗材折舊年限
-Depreciation,Life,Pump_Life_Year,7,Year,泵浦/灌溉設備折舊年限
+Depreciation,Life,Fan_Life_Year,10,Year,風扇/馬達折舊年限
+Depreciation,Life,Net_Life_Year,5,Year,防蟲網/耗材折舊年限
+Depreciation,Life,Pump_Life_Year,10,Year,泵浦/灌溉設備折舊年限

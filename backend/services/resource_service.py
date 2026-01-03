@@ -90,3 +90,24 @@ class ResourceService:
                 
             return df
         except: return pd.DataFrame()
+
+    # --- [新增] 讀取成本參數設定 ---
+    def load_cost_parameters(self, filename='cost_parameters.csv'):
+        """
+        讀取成本參數 CSV 並轉為字典，方便用 Key 查詢數值
+        """
+        path = os.path.join(self.data_root, filename)
+        default_costs = {}
+        
+        if os.path.exists(path):
+            try:
+                df = pd.read_csv(path)
+                # 轉成字典格式: {'Electricity_Rate': 4.0, 'Fan_Unit_Price': 15000, ...}
+                # 確保 Value 欄位是數字
+                df['Value'] = pd.to_numeric(df['Value'], errors='coerce').fillna(0)
+                default_costs = dict(zip(df['Item'], df['Value']))
+            except Exception as e:
+                print(f"Error reading cost parameters: {e}")
+                
+        return default_costs
+
