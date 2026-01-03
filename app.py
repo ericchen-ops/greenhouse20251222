@@ -215,68 +215,120 @@ with tab1:
                     target_filename = f; break
     
     if target_filename:
-        # 2. 設定面板
-        c_set1, c_set2 = st.columns([1, 2])
+        c_set1, c_set2 = st.columns([1, 2.5])
         
         crop_data = climate_svc.get_crop_light_requirements()
         
         with c_set1:
-            st.markdown("#### ⚙️ 栽培設定")
+            st.markdown("#### ⚙️ 栽培與環境設定")
+            
+            # 1. 作物選擇
             sel_crop = st.selectbox("目標作物", list(crop_data.keys()))
             crop_req = crop_data[sel_crop]
             sat_point = crop_req['sat']
             comp_point = crop_req['comp']
             target_dli = crop_req.get('dli', 15)
             
-            st.info(f"📋 **{sel_crop}** 參數：\n"
-                    f"• 光補償點: `{comp_point}` μmol\n"
-                    f"• 光飽和點: `{sat_point}` μmol\n"
-                    f"• 目標 DLI: `{target_dli}` mol")
+            m1, m2 = st.columns(2)
+            m1.metric("補償點", f"{int(comp_point)}", "μmol")
+            m2.metric("飽和點", f"{int(sat_point)}", "μmol")
             
             st.markdown("---")
-            env_mode = st.radio("環境設定", ["室外 (Outdoor)", "室內 (Indoor)"], horizontal=True)
+            
+            # 2. 環境設定 (透光率)
+            env_mode = st.radio("觀測情境", ["室外 (Outdoor)", "室內 (Indoor)"], horizontal=True)
             trans_rate = 100
             if env_mode == "室內 (Indoor)":
-                trans_rate = st.slider("透光率 (%)", 10, 100, 50, step=5)
+                trans_rate = st.slider("溫室透光率 (%)", 5, 100, 50, step=5, help="考慮遮陰網與覆蓋材的總透光率")
+            
+            # 3. 進階校正 (解決數值過高問題)
+            with st.expander("🛠️ 進階參數校正", expanded=False):
+                st.caption("若數值與現場差異過大，請調整轉換係數。")
+                ppfd_coef = st.slider("MJ -> PPFD 轉換係數", 300.0, 600.0, 500.0, step=10.0, help="每 1 MJ/m² 對應多少 μmol/m²/s。室外約 550，室內通常較低 (約 450-500)。")
 
-        # 3. 呼叫後端運算
+        # 呼叫後端運算
         matrix, dli_monthly = climate_svc.calculate_monthly_light_matrix(target_filename, transmittance_percent=trans_rate)
         
         if matrix is not None:
+            # [關鍵修正] 在前端進行係數校正
+            # 原本後端是用 571.2 算的，我們把它還原再乘上新的係數
+            correction_factor = ppfd_coef / 571.2
+            matrix = matrix * correction_factor
+            dli_monthly = dli_monthly * correction_factor
+            
             with c_set2:
-                # [圖表 1] 月平均 DLI
-                st.markdown("#### 📊 平均 DLI (日累積光量)")
+                # -----------------------------------------------------------
+                # [圖表 1] DLI 分析
+                # -----------------------------------------------------------
+                st.markdown("#### 📊 月平均 DLI (日累積光量)")
+                dli_colors = ['#10b981' if v >= target_dli else '#f59e0b' for v in dli_monthly.values]
+                
                 fig_dli = go.Figure(go.Bar(
                     x=dli_monthly.index, y=dli_monthly.values,
-                    marker_color='#10b981',
+                    marker_color=dli_colors,
                     text=[f"{v:.1f}" for v in dli_monthly.values], textposition='auto',
                     name='DLI'
                 ))
-                fig_dli.update_layout(height=200, template="plotly_dark", margin=dict(l=20,r=20,t=20,b=10), xaxis=dict(title="月份", dtick=1), yaxis=dict(title="mol/m²/day"))
+                fig_dli.add_hline(y=target_dli, line_dash="dash", line_color="white", annotation_text=f"目標: {target_dli}")
+                fig_dli.update_layout(height=220, template="plotly_dark", margin=dict(l=20,r=20,t=30,b=10), xaxis=dict(title="月份", dtick=1), yaxis=dict(title="mol/m²/day"), showlegend=False)
                 st.plotly_chart(fig_dli, use_container_width=True)
 
-            # [圖表 2] 三色熱力圖
-            st.markdown("#### 🔥 全年光照適性指紋圖")
-            st.caption(f"🎨 顏色說明：⬜ 灰色 < {comp_point} (無效) | 🟨 米黃色 (適當生長) | 🟥 紅色 > {sat_point} (過量/飽和)")
+                # -----------------------------------------------------------
+                # [圖表 2] 光照熱圖 (Excel 風格 + 修正版)
+                # -----------------------------------------------------------
+                st.markdown("#### 🔥 全年光照適性指紋圖 (Month × Hour)")
+                
+                z_values = matrix.values
+                z_category = np.zeros_like(z_values)
+                
+                # 分類邏輯 (0:無效, 1:適當, 2:過量)
+                z_category[(z_values >= comp_point) & (z_values <= sat_point)] = 1
+                z_category[z_values > sat_point] = 2
+                
+                # Excel 風格色票
+                excel_colors = [
+                    [0.0, '#e5e7eb'],   # 0: 灰
+                    [0.33, '#e5e7eb'],
+                    [0.33, '#fef08a'],  # 1: 米黃
+                    [0.66, '#fef08a'],
+                    [0.66, '#ef4444'],  # 2: 紅
+                    [1.0, '#ef4444']
+                ]
+                
+                fig_heat = go.Figure(data=go.Heatmap(
+                    z=z_category, 
+                    x=matrix.columns, y=matrix.index,
+                    colorscale=excel_colors, 
+                    showscale=False, 
+                    
+                    # Excel 網格感
+                    xgap=2, ygap=2, 
+                    
+                    # ★★★ 關鍵修正：鎖定顏色範圍 ★★★
+                    # 這行是解藥！確保 0=灰, 1=黃, 2=紅，不會亂跳
+                    zmin=0, zmax=2, 
+                    
+                    customdata=z_values,
+                    hovertemplate='<b>%{y}月 %{x}:00</b><br>平均 PPFD: <b>%{customdata:.0f}</b> μmol<br>狀態: %{z}<extra></extra>'
+                ))
+                
+                fig_heat.update_layout(
+                    height=450, template="plotly_dark", margin=dict(l=50, r=50, t=10, b=50),
+                    xaxis=dict(title="時間", tickmode='array', tickvals=list(range(0,24,2)), ticktext=[f"{h:02d}:00" for h in range(0,24,2)]),
+                    yaxis=dict(title="月份", tickmode='linear', dtick=1, autorange='reversed')
+                )
+                st.plotly_chart(fig_heat, use_container_width=True)
+                
+                cl1, cl2, cl3 = st.columns(3)
+                cl1.markdown(f"⬜ **無效/微弱** (<{int(comp_point)})")
+                cl2.markdown(f"🟨 **適當生長** ({int(comp_point)}~{int(sat_point)})")
+                cl3.markdown(f"🟥 **過量/飽和** (>{int(sat_point)})")
             
-            z_values = matrix.values
-            z_category = np.zeros_like(z_values)
-            z_category[(z_values >= comp_point) & (z_values <= sat_point)] = 1
-            z_category[z_values > sat_point] = 2
-            
-            custom_colors = [[0.0, '#d1d5db'], [0.33, '#d1d5db'], [0.33, '#fef3c7'], [0.66, '#fef3c7'], [0.66, '#ef4444'], [1.0, '#ef4444']]
-            
-            fig_heat = go.Figure(data=go.Heatmap(
-                z=z_category, x=matrix.columns, y=matrix.index,
-                colorscale=custom_colors, showscale=False, customdata=z_values,
-                hovertemplate='<b>%{y}月 %{x}點</b><br>平均 PPFD: %{customdata:.0f} μmol<br>狀態: %{z}<extra></extra>'
-            ))
-            fig_heat.update_layout(height=400, template="plotly_dark", xaxis=dict(title="時間", dtick=2), yaxis=dict(title="月份", dtick=1, autorange='reversed'), margin=dict(l=50,r=50,t=20,b=20))
-            st.plotly_chart(fig_heat, use_container_width=True)
         else:
             st.warning(f"⚠️ 讀取數據失敗：請確認 `{target_filename}` 格式是否正確。")
     else:
         st.warning(f"⚠️ 尚未上傳 **{CURR_LOC['name']}** 的原始氣象 CSV 檔。")
+        
 
 # --- Tab 2: 室內氣候 ---
 with tab2:
