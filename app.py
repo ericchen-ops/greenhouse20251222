@@ -89,11 +89,11 @@ if 'production_costs' not in st.session_state: st.session_state.production_costs
 # 標題區
 c1, c2 = st.columns([1, 4])
 with c1: st.image("https://cdn-icons-png.flaticon.com/512/2942/2942544.png", width=80)
-with c2: st.title("溫室模擬與環境分析系統 V7.1"); st.markdown("20251222 完整版")
+with c2: st.title("溫室模擬與環境分析系統 V7.1"); st.markdown("20251222 ")
 
 # 側邊欄：地區選擇
 with st.sidebar:
-    st.header("基礎設定")
+    st.header("氣象站設定")
     loc_options = list(WEATHER_DB.keys())
     # 設定預設選項 (若有東港則預設東港)
     default_key = next((k for k in loc_options if '東港' in k), loc_options[0] if loc_options else None)
@@ -116,6 +116,37 @@ tab1, tab2, tab3, tab4 = st.tabs(["1. 外部環境", "2. 內部微氣候", "3. �
 
 # --- Tab 1: 外部環境 ---
 with tab1:
+    # --- 地圖區塊 ---
+    st.markdown("---")
+    st.subheader("🗺️ 氣象站位置")
+    with st.expander("點擊查看氣象站位置", expanded=False):
+        map_data = []
+        for key, value in WEATHER_DB.items():
+            lat = value.get('lat') or value.get('latitude')
+            lon = value.get('lon') or value.get('longitude')
+            if lat is None: lat = 23.973875
+            if lon is None: lon = 120.982024
+            
+            map_data.append({
+                "name": value.get('name', key),
+                "lat": float(lat), "lon": float(lon),
+                "desc": value.get('description', '無描述')
+            })
+        df_map = pd.DataFrame(map_data)
+        m = folium.Map(location=[23.7, 121.0], zoom_start=7)
+        for _, row in df_map.iterrows():
+            is_current = (row['name'] == CURR_LOC['name'])
+            icon_color = 'red' if is_current else 'green'
+            icon_type = 'star' if is_current else 'leaf'
+            folium.Marker(
+                location=[row['lat'], row['lon']],
+                popup=f"<b>{row['name']}</b><br>{row['desc']}",
+                tooltip=row['name'],
+                icon=folium.Icon(color=icon_color, icon=icon_type)
+            ).add_to(m)
+            
+        st_folium(m, width=1000, height=500, use_container_width=True, returned_objects=[])
+
     st.subheader(f"📍 {CURR_LOC['name']} - 氣候數據")
     c_data = CURR_LOC['data']
     df_clim = pd.DataFrame({
@@ -168,42 +199,12 @@ with tab1:
         fig2.update_layout(height=450, template="plotly_dark", xaxis_title="氣溫 (°C)", yaxis_title="日射強度 (W/m²)", legend=dict(orientation="v", y=1, x=1.02), margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # --- 地圖區塊 ---
-    st.markdown("---")
-    st.subheader("🗺️ 氣象站地理位置分佈")
-    with st.expander("點擊展開地圖", expanded=True):
-        map_data = []
-        for key, value in WEATHER_DB.items():
-            lat = value.get('lat') or value.get('latitude')
-            lon = value.get('lon') or value.get('longitude')
-            if lat is None: lat = 23.973875
-            if lon is None: lon = 120.982024
-            
-            map_data.append({
-                "name": value.get('name', key),
-                "lat": float(lat), "lon": float(lon),
-                "desc": value.get('description', '無描述')
-            })
-        df_map = pd.DataFrame(map_data)
-        m = folium.Map(location=[23.7, 121.0], zoom_start=7)
-        for _, row in df_map.iterrows():
-            is_current = (row['name'] == CURR_LOC['name'])
-            icon_color = 'red' if is_current else 'green'
-            icon_type = 'star' if is_current else 'leaf'
-            folium.Marker(
-                location=[row['lat'], row['lon']],
-                popup=f"<b>{row['name']}</b><br>{row['desc']}",
-                tooltip=row['name'],
-                icon=folium.Icon(color=icon_color, icon=icon_type)
-            ).add_to(m)
-            
-        st_folium(m, width=1000, height=500, use_container_width=True, returned_objects=[])
-
+    
     # --- 光環境適性分析 (Tab 1 下半部) ---
     st.markdown("---")
-    st.subheader(f"☀️ {CURR_LOC['name']} - 光環境適性分析 (月均值版)")
+    st.subheader(f"☀️ {CURR_LOC['name']} - 光環境適性分析")
     
-    # 1. 取得檔案路徑 (修復重點)
+    # 1. 取得檔案路徑 
     target_filename = CURR_LOC.get('filename') 
     
     if not target_filename:
@@ -227,7 +228,8 @@ with tab1:
             crop_req = crop_data[sel_crop]
             sat_point = crop_req['sat']
             comp_point = crop_req['comp']
-            target_dli = crop_req.get('dli', 15)
+            target_dli = crop_req.get('dli', 17)
+            min_dli_limit = crop_req.get('min_dli', 8)
             
             m1, m2 = st.columns(2)
             m1.metric("補償點", f"{int(comp_point)}", "μmol")
@@ -239,12 +241,14 @@ with tab1:
             env_mode = st.radio("觀測情境", ["室外 (Outdoor)", "室內 (Indoor)"], horizontal=True)
             trans_rate = 100
             if env_mode == "室內 (Indoor)":
-                trans_rate = st.slider("溫室透光率 (%)", 5, 100, 50, step=5, help="考慮遮陰網與覆蓋材的總透光率")
+                trans_rate = st.slider("溫室透光率 (%)", 5, 100, 51, step=1, help="考慮遮陰網與覆蓋材的總透光率，請先計算(1-遮陰率)*材質透光率")#預設值為40%模組遮蔽率*85%透光率=51%
             
             # 3. 進階校正 (解決數值過高問題)
             with st.expander("🛠️ 進階參數校正", expanded=False):
                 st.caption("若數值與現場差異過大，請調整轉換係數。")
-                ppfd_coef = st.slider("MJ -> PPFD 轉換係數", 300.0, 600.0, 500.0, step=10.0, help="每 1 MJ/m² 對應多少 μmol/m²/s。室外約 550，室內通常較低 (約 450-500)。")
+                ppfd_coef = st.slider("MJ -> PPFD 轉換係數", 300.0, 600.0, 571.0, step=1.0, help="每 1 MJ/m² 對應多少 μmol/m²/s。室外約 550，室內通常較低 (約 450-500)。")
+                #每小時MJ / m²換算 μmol / m² / s ，PPFD = MJ / m² * 1000000(MJ換算成J) * 45 % (有效光波長) * 4.57(太陽光，能量單位焦耳轉光子單位微莫耳的常數) / 3600 (秒) = 571
+
 
         # 呼叫後端運算
         matrix, dli_monthly = climate_svc.calculate_monthly_light_matrix(target_filename, transmittance_percent=trans_rate)
@@ -260,7 +264,7 @@ with tab1:
                 # -----------------------------------------------------------
                 # [圖表 1] DLI 分析
                 # -----------------------------------------------------------
-                st.markdown("#### 📊 月平均 DLI (日累積光量)")
+                st.markdown("#### 📊  DLI (日累積光量，單位：mol / m² / day)")
                 dli_colors = ['#10b981' if v >= target_dli else '#f59e0b' for v in dli_monthly.values]
                 
                 fig_dli = go.Figure(go.Bar(
@@ -269,66 +273,84 @@ with tab1:
                     text=[f"{v:.1f}" for v in dli_monthly.values], textposition='auto',
                     name='DLI'
                 ))
-                fig_dli.add_hline(y=target_dli, line_dash="dash", line_color="white", annotation_text=f"目標: {target_dli}")
+                fig_dli.add_hline(y=target_dli, line_dash="dash", line_color="white", annotation_text=f"上限值: {target_dli}")
+                fig_dli.add_hline(y=min_dli_limit, line_dash="dash", line_color="white", annotation_text=f"下限值: {min_dli_limit}")
                 fig_dli.update_layout(height=220, template="plotly_dark", margin=dict(l=20,r=20,t=30,b=10), xaxis=dict(title="月份", dtick=1), yaxis=dict(title="mol/m²/day"), showlegend=False)
                 st.plotly_chart(fig_dli, use_container_width=True)
 
                 # -----------------------------------------------------------
-                # [圖表 2] 光照熱圖 (Excel 風格 + 修正版)
-                # -----------------------------------------------------------
-                st.markdown("#### 🔥 全年光照適性指紋圖 (Month × Hour)")
+            # [圖表 2] 光照熱圖 (終極解法：Python 預先組好文字)
+            # -----------------------------------------------------------
+            st.markdown("#### 🔥 全年光照分布圖 (單位：μmol / m² / s)")
+            
+            # 1. 準備數據 (四捨五入取整數)
+            z_values = matrix.values.round(0)
+            
+            # 2. 建立顏色分類矩陣 (0, 1, 2)
+            z_category = np.zeros_like(z_values)
+            z_category[(z_values >= comp_point) & (z_values <= sat_point)] = 1
+            z_category[z_values > sat_point] = 2
+            
+            # 3. ★★★ 關鍵修改：在 Python 裡先把每一格的 Hover 文字組好 ★★★
+            # 這樣 Plotly 只要負責顯示就好，不用處理變數，保證能顯示數字
+            hover_text_matrix = []
+            for y_idx, month in enumerate(matrix.index):
+                row_txt = []
+                for x_idx, hour in enumerate(matrix.columns):
+                    val = z_values[y_idx][x_idx]
+                    # 直接組合成 HTML 字串
+                    txt = (f"<b>{int(month)}月 {int(hour)}:00</b><br>"
+                           f"平均 PPFD: <b>{int(val)}</b> μmol<br>")
+                    row_txt.append(txt)
+                hover_text_matrix.append(row_txt)
+
+            # 4. 定義 Excel 風格色票
+            excel_colors = [
+                [0.0, "#c7cacf"],   # 0: 灰
+                [0.33, "#5E6063"],
+                [0.33, "#dcca43"],  # 1: 米黃
+                [0.66, "#a4920a"],
+                [0.66, "#bf1919"],  # 2: 紅
+                [1.0, "#d51414"]
+            ]
+            
+            # 5. 繪製熱力圖
+            fig_heat = go.Figure(data=go.Heatmap(
+                z=z_category, 
+                x=matrix.columns, y=matrix.index,
+                colorscale=excel_colors, 
+                showscale=False, 
+                xgap=2, ygap=2, 
+                zmin=0, zmax=2, 
                 
-                z_values = matrix.values
-                z_category = np.zeros_like(z_values)
+                # ★★★ 關鍵：改用 hovertext 傳入我們組好的文字矩陣 ★★★
+                hovertext=hover_text_matrix,
                 
-                # 分類邏輯 (0:無效, 1:適當, 2:過量)
-                z_category[(z_values >= comp_point) & (z_values <= sat_point)] = 1
-                z_category[z_values > sat_point] = 2
-                
-                # Excel 風格色票
-                excel_colors = [
-                    [0.0, '#e5e7eb'],   # 0: 灰
-                    [0.33, '#e5e7eb'],
-                    [0.33, '#fef08a'],  # 1: 米黃
-                    [0.66, '#fef08a'],
-                    [0.66, '#ef4444'],  # 2: 紅
-                    [1.0, '#ef4444']
-                ]
-                
-                fig_heat = go.Figure(data=go.Heatmap(
-                    z=z_category, 
-                    x=matrix.columns, y=matrix.index,
-                    colorscale=excel_colors, 
-                    showscale=False, 
-                    
-                    # Excel 網格感
-                    xgap=2, ygap=2, 
-                    
-                    # ★★★ 關鍵修正：鎖定顏色範圍 ★★★
-                    # 這行是解藥！確保 0=灰, 1=黃, 2=紅，不會亂跳
-                    zmin=0, zmax=2, 
-                    
-                    customdata=z_values,
-                    hovertemplate='<b>%{y}月 %{x}:00</b><br>平均 PPFD: <b>%{customdata:.0f}</b> μmol<br>狀態: %{z}<extra></extra>'
-                ))
-                
-                fig_heat.update_layout(
-                    height=450, template="plotly_dark", margin=dict(l=50, r=50, t=10, b=50),
-                    xaxis=dict(title="時間", tickmode='array', tickvals=list(range(0,24,2)), ticktext=[f"{h:02d}:00" for h in range(0,24,2)]),
-                    yaxis=dict(title="月份", tickmode='linear', dtick=1, autorange='reversed')
-                )
-                st.plotly_chart(fig_heat, use_container_width=True)
-                
-                cl1, cl2, cl3 = st.columns(3)
-                cl1.markdown(f"⬜ **無效/微弱** (<{int(comp_point)})")
-                cl2.markdown(f"🟨 **適當生長** ({int(comp_point)}~{int(sat_point)})")
-                cl3.markdown(f"🟥 **過量/飽和** (>{int(sat_point)})")
+                # ★★★ 模板只要讀取 hovertext 就好，不用再寫 %{text} ★★★
+                hovertemplate="%{hovertext}<extra></extra>"
+            ))
+            
+            fig_heat.update_layout(
+                height=450, 
+                template="plotly_dark", 
+                margin=dict(l=50, r=50, t=10, b=50),
+                # 強制開啟互動
+                hovermode="closest", 
+                xaxis=dict(title="時間", tickmode='array', tickvals=list(range(0,24,2)), ticktext=[f"{h:02d}:00" for h in range(0,24,2)]),
+                yaxis=dict(title="月份", tickmode='linear', dtick=1, autorange='reversed')
+            )
+            st.plotly_chart(fig_heat, use_container_width=True)
+            
+            cl1, cl2, cl3 = st.columns(3)
+            cl1.markdown(f"⬜ **低於光補償點** (<{int(comp_point)})")
+            cl2.markdown(f"🟨 **適當範圍** ({int(comp_point)}~{int(sat_point)})")
+            cl3.markdown(f"🟥 **超過光飽和點** (>{int(sat_point)})")
             
         else:
             st.warning(f"⚠️ 讀取數據失敗：請確認 `{target_filename}` 格式是否正確。")
     else:
         st.warning(f"⚠️ 尚未上傳 **{CURR_LOC['name']}** 的原始氣象 CSV 檔。")
-        
+
 
 # --- Tab 2: 室內氣候 ---
 with tab2:
