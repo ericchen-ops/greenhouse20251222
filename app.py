@@ -9,6 +9,32 @@ import folium
 from streamlit_folium import st_folium
 import sys 
 
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import math
+import os
+import folium
+from streamlit_folium import st_folium
+import sys 
+
+# 設定寬版模式 (解決擠成一團的問題)
+
+st.set_page_config(
+    page_title="溫室環境決策系統 V7.1", 
+    page_icon="🌿", 
+    layout="wide" 
+)
+
+st.markdown("""
+<style>
+    .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+</style>
+""", unsafe_allow_html=True)
+
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
