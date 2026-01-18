@@ -1,25 +1,28 @@
-Type,Category,Item,Value,Unit,Description
-OPEX,Energy,Electricity_Rate,4.0,NTD/kWh,平均電費 (參考水電費用表_混合尖離峰)
-OPEX,Energy,Water_Rate,10.0,NTD/m3,用水費單價
-OPEX,Labor,Hourly_Wage_Worker,200,NTD/hr,一般操作工時薪 (含勞健保/以月薪35k換算)
-OPEX,Labor,Hourly_Wage_Manager,350,NTD/hr,場長/管理職時薪 (以月薪60k-70k換算)
-OPEX,Labor,Workers_Per_Ha,5,Person,每公頃標準配置人力 (參考人力需求表)
-OPEX,Material,Seed_Cost,0.005,NTD/seed,種子單價 (高規包衣種子)
-OPEX,Material,Substrate_Cost,0.3,NTD/pot,介質成本 (參考外購介質_泥炭土/椰纖)
-OPEX,Material,Nutrient_Cost,0.15,NTD/day/m2,液肥與營養液平均日耗損
-OPEX,Material,Packaging_Cost,2.0,NTD/unit,包裝耗材 (袋子/束帶)
-OPEX,Maintenance,Maint_Rate_Structure,0.01,%,結構年維護費率 (造價的1%)
-OPEX,Maintenance,Maint_Rate_Equipment,0.03,%,設備年維護費率 (造價的3%)
-CAPEX,Structure,Greenhouse_Structure_Price,5500,NTD/m2,太陽能溫室主體結構 (含基礎/鋼構/綠能設施)
-CAPEX,Structure,Vent_Structure_Price,3000,NTD/m2,天窗/側窗結構系統單價
-CAPEX,Equipment,Fan_Unit_Price,16000,NTD/unit,50吋負壓風扇 (含安裝工資)
-CAPEX,Equipment,Circulation_Fan_Price,4500,NTD/unit,內循環風扇
-CAPEX,Equipment,Pad_Cooling_Price,800,NTD/m2,水牆系統造價 (每米平方)
-CAPEX,Equipment,Net_Unit_Price,60,NTD/m2,防蟲網/遮蔭網 (高目數)
-CAPEX,Equipment,Fog_System_Price,15,NTD/g/m2,高壓噴霧系統 (每單位流量造價)
-CAPEX,Equipment,Irrigation_System_Price,80,NTD/m2,灌溉施肥系統 (Dosatron/Netafim等級)
-CAPEX,Equipment,Automation_System_Price,150,NTD/m2,環控電腦與感測器 (如Priva/Hoogendoorn)
-Depreciation,Life,Structure_Life_Year,20,Year,主體結構折舊年限
-Depreciation,Life,Fan_Life_Year,10,Year,風扇/馬達折舊年限
-Depreciation,Life,Net_Life_Year,5,Year,防蟲網/耗材折舊年限
-Depreciation,Life,Pump_Life_Year,10,Year,泵浦/灌溉設備折舊年限
+Type,Category,Item,Value,Unit,Description,Payer,Applicable_Tags
+OPEX,Energy,Electricity_Rate,4.0,NTD/kWh,平均電費 (參考水電費用表_混合尖離峰),Franchisee,All
+OPEX,Energy,Water_Rate,10.0,NTD/m3,用水費單價,Franchisee,All
+OPEX,Labor,Hourly_Wage_Worker,200.0,NTD/hr,一般操作工時薪 (含勞健保/以月薪35k換算),Franchisee,All
+OPEX,Labor,Hourly_Wage_Manager,350.0,NTD/hr,場長/管理職時薪 (以月薪60k-70k換算),Franchisee,All
+OPEX,Labor,Workers_Per_Ha,5.0,Person,每公頃標準配置人力 (參考人力需求表),Franchisee,All
+OPEX,Material,Seed_Cost,0.005,NTD/seed,種子單價 (高規包衣種子),Franchisee,All
+OPEX,Material,Substrate_Cost,0.3,NTD/pot,介質成本 (參考外購介質_泥炭土/椰纖),Franchisee,All
+OPEX,Material,Nutrient_Cost,0.15,NTD/day/m2,液肥與營養液平均日耗損,Franchisee,All
+OPEX,Material,Packaging_Cost,2.0,NTD/unit,包裝耗材 (袋子/束帶),Franchisee,All
+OPEX,Maintenance,Maint_Rate_Structure,0.01,%,結構年維護費率 (造價的1%),Franchisee,All
+OPEX,Maintenance,Maint_Rate_Equipment,0.03,%,設備年維護費率 (造價的3%),Franchisee,All
+CAPEX,Structure,Greenhouse_Structure_Price,2000.0,NTD/m2,溫室主體結構 (含基礎/鋼構),Headquarters,All
+CAPEX,Structure,Vent_Structure_Price,600,NTD/m2,天窗/側窗結構系統單價,Headquarters,All
+CAPEX,Equipment,Fan_Unit_Price,16000.0,NTD/unit,50吋負壓風扇 (含安裝工資),Headquarters,All
+CAPEX,Equipment,Circulation_Fan_Price,4500.0,NTD/unit,內循環風扇,Headquarters,All
+CAPEX,Equipment,Pad_Cooling_Price,800.0,NTD/m2,水牆系統造價 (每米平方),Headquarters,All
+CAPEX,Equipment,Net_Unit_Price,60.0,NTD/m2,防蟲網/遮蔭網 (高目數),Headquarters,All
+CAPEX,Equipment,Fog_System_Price,15.0,NTD/g/m2,高壓噴霧系統 (每單位流量造價),Headquarters,All
+CAPEX,Equipment,Irrigation_System_Price,80.0,NTD/m2,灌溉施肥系統 (Dosatron/Netafim等級),Headquarters,All
+CAPEX,Equipment,Automation_System_Price,150.0,NTD/m2,環控電腦與感測器 (如Priva/Hoogendoorn),Headquarters,All
+Depreciation,Life,Structure_Life_Year,20.0,Year,主體結構折舊年限,Headquarters,All
+Depreciation,Life,Fan_Life_Year,10.0,Year,風扇/馬達折舊年限,Headquarters,All
+Depreciation,Life,Net_Life_Year,5.0,Year,防蟲網/耗材折舊年限,Headquarters,All
+Depreciation,Life,Pump_Life_Year,10.0,Year,泵浦/灌溉設備折舊年限,Headquarters,All
+CAPEX,Equipment,NFT_System_Price,2500.0,NTD/m2,NFT水耕與管線系統 (葉菜專用),Headquarters,"Hydroponic,Leafy"
+CAPEX,Equipment,High_Bench_Price,1500.0,NTD/m2,高架栽培床架 (草莓/介質耕專用),Headquarters,"Soil,Berry"
+OPEX,Material,Pollination_Cost,3000.0,NTD/box,授粉蜂箱 (果菜類專用),Franchisee,"Fruit,Berry"

@@ -10,15 +10,14 @@ from streamlit_folium import st_folium
 import sys 
 
 # ==========================================
-# 1. 頁面設定 (必須在所有程式碼的最上面)
+# 1. 頁面設定 
 # ==========================================
 st.set_page_config(
     page_title="溫室環境決策系統 V7.5", 
     page_icon="🌿", 
-    layout="wide"  # <--- 寬版模式：解決擠成一團的關鍵
+    layout="wide"  # <--- 寬版模式
 )
 
-# 加入 CSS 微調，減少頂部空白，讓畫面更滿版
 st.markdown("""
 <style>
     .block-container {
@@ -41,11 +40,16 @@ from backend.services.resource_service import ResourceService
 from backend.services.market_service import MarketService
 from backend.services.simulation_service import SimulationService
 
+
 # ==========================================
 # 2. 系統初始化 (實例化服務)
 # ==========================================
 climate_svc = ClimateService(base_folder='data/weather_data')
-resource_svc = ResourceService(data_root='data')
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+data_path = os.path.join(base_dir, 'data')
+resource_svc = ResourceService(data_path=data_path)
+
 market_svc = MarketService(base_folder='data/market_data')
 sim_svc = SimulationService()
 
@@ -119,10 +123,44 @@ with st.sidebar:
     st.caption(CURR_LOC.get('description', ''))
     if 'market_prices' not in st.session_state: st.session_state.market_prices = CURR_LOC['data']['marketPrice'].copy()
 
+    # --- 修改 app.py 側邊欄區域 ---
+with st.sidebar:
+    # ... (前面的氣象站設定保持不變) ...
+
+    st.markdown("---")
+    st.header("育苗場經營設定")
+
+    # 🟢 修正重點：直接讀取 nursery_crops.csv 建立選單
+    # 確保路徑指向 data/biological_data/nursery_crops.csv
+    nursery_csv_path = os.path.join(data_path, 'biological_data', 'nursery_crops.csv')
+    
+    nursery_options = []
+    
+    if os.path.exists(nursery_csv_path):
+        try:
+            # 直接讀取 CSV，不透過中間的 CROP_DB
+            df_nursery_raw = pd.read_csv(nursery_csv_path)
+            if 'Crop_Name' in df_nursery_raw.columns:
+                nursery_options = df_nursery_raw['Crop_Name'].unique().tolist()
+            else:
+                st.error("CSV 格式錯誤：找不到 Crop_Name 欄位")
+        except Exception as e:
+            st.error(f"無法讀取育苗 CSV: {e}")
+    else:
+        st.error(f"找不到檔案: {nursery_csv_path}")
+
+    # 產生選單 (變數名稱固定為 selected_crops 以便 Tab 4 呼叫)
+    selected_crops = st.multiselect(
+        "選擇育苗作物 (多選)",
+        options=nursery_options,
+        default=nursery_options[:2] if len(nursery_options) >= 2 else nursery_options,
+        help="資料來源：nursery_crops.csv (將直接使用檔案內的價格與成本數據)"
+    )
+
 # ==========================================
 # 3. 前端介面邏輯 (Tabs)
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs(["1. 外部環境", "2. 內部微氣候", "3. 產能價格", "4. 邊際效益(尚在調整中)"])
+tab1, tab2, tab3, tab4 = st.tabs(["1. 外部環境", "2. 內部微氣候", "3. 作物生產模式分析", "4. 育苗商業模式分析"])
 
 # --- Tab 1: 外部環境 ---
 with tab1:
@@ -699,11 +737,12 @@ with tab3:
     st.markdown("---")
     st.markdown("### 📊 年度財務指標")
     
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("預估年營收", f"${int(total_revenue/10000):,} 萬")
     k2.metric("總營運成本 (OPEX)", f"${int(total_opex/10000):,} 萬", delta="-支出", delta_color="inverse")
-    k3.metric("預估稅前淨利", f"${int(net_profit/10000):,} 萬", delta=f"ROI {roi:.1f}%")
-    k4.metric("損益平衡點", f"${int((total_opex+depr_annual)/total_yield_kg):.1f} /kg" if total_yield_kg>0 else "N/A")
+    k3.metric("折舊", f"${int(depr_annual/10000):,} 萬", delta="-支出", delta_color="inverse")
+    k4.metric("預估稅前淨利", f"${int(net_profit/10000):,} 萬", delta=f"ROI {roi:.1f}%")
+    k5.metric("生產成本", f"${int((total_opex+depr_annual)/total_yield_kg):.1f} /kg" if total_yield_kg>0 else "N/A")
     
     st.markdown("---")
     
@@ -763,195 +802,161 @@ with tab3:
             }, hide_index=True, use_container_width=True
         )
 
-# --- Tab 4: 設備最佳化分析 (整合 COST_DB) ---
+    
+# --- Tab 4: 育苗商業模式分析 ---
 with tab4:
-    st.subheader("⚖️ 設備最佳化：ROI 邊際效益分析")
-    
-    if 'gh_specs' not in st.session_state:
-        st.warning("⚠️ 請先至「Tab 2: 內部微氣候」完成規格設定。")
+    st.header("🏭 專業育苗場財務模型 (Pure Nursery Business)")
+    st.caption("本模型模擬將溫室做為「專業種苗代工廠」，依據季節自動輪作不同作物之財務預估。")
+
+    # 1. 檢查必要輸入
+    if not selected_crops:
+        st.warning("⚠️ 請先在左側側邊欄選擇至少一種作物 (Crops)，系統才能進行排程模擬。")
         st.stop()
-        
-    gh_specs = st.session_state.gh_specs
-    fan_specs = st.session_state.fan_specs
+
+    # 2. 準備參數 (從 ResourceService 或手動定義費率)
+    # 這裡將 cost_parameters 轉為字典格式傳給後端
+    # 預設值設定 (若 CSV 讀不到時的備案)
+    cost_params_dict = {
+        'Hourly_Wage_Manager': 250,  # 場長時薪
+        'Hourly_Wage_Worker': 183,   # 員工時薪 (若育苗服務有用到)
+        # 您可以根據 cost_parameters.csv 的內容擴充
+    }
     
-    # 1. 分析目標
-    st.markdown("#### 🎯 選擇要最佳化的系統")
-    target_sys = st.radio(
-        "請選擇分析對象", 
-        ["負壓風扇 (Fans)", "內遮蔭 (Shading)", "天窗面積 (Vents)", "噴霧系統 (Fogging)"], 
-        horizontal=True
+    # 嘗試從 resource_svc 更新更準確的費率
+    if not resource_svc.cost_df.empty:
+        try:
+            # 抓取場長薪資
+            mgr_row = resource_svc.cost_df[resource_svc.cost_df['Item'] == 'Hourly_Wage_Manager']
+            if not mgr_row.empty:
+                cost_params_dict['Hourly_Wage_Manager'] = float(mgr_row.iloc[0]['Value'])
+        except:
+            pass # 發生錯誤就用預設值 350
+
+    # 確保 gh_specs 有總投資額 (CAPEX)，若無則用預估值
+    # 假設 total_capex 是前面計算出來的變數，如果沒有，請填入預設數字
+    current_capex = locals().get('total_capex', 5000000) 
+    gh_specs['total_investment'] = current_capex
+
+    # 3. 呼叫後端模擬引擎 (Run Pure Nursery Simulation)
+    # 這裡會回傳包含「年度總表」與「每月細項」的報告
+    if 'gh_specs' not in st.session_state:
+        st.error("請先至 Tab 2 設定溫室規格！")
+        st.stop()
+
+    nursery_report = sim_svc.run_pure_nursery_simulation(
+        selected_crops, 
+        st.session_state.gh_specs,   # <--- 關鍵：使用 Session State
+        cost_params_dict,
+        CURR_LOC['data'],
+        st.session_state.fan_specs   # <--- 關鍵：使用 Session State
     )
-    st.markdown("---")
-    
-    col_opt1, col_opt2 = st.columns([1, 2.5])
-    
-    # --- 左側：自動讀取 CSV 成本 ---
-    with col_opt1:
-        st.markdown("### ⚙️ 成本參數 (Auto-Load)")
+
+    if nursery_report:
+        ov = nursery_report['overview']
+        monthly_data = nursery_report['monthly_data']
         
-        # 讀取共用參數
-        elec_rate = st.number_input("電費費率 ($/度)", value=float(COST_DB.get('Electricity_Rate', 3.5)), step=0.5)
-        run_hours = st.number_input("年運轉時數 (hr)", value=3000, step=100)
+        # --- A. 核心 KPI 指標區 ---
+        st.subheader("💰 年度營運總覽")
+        k1, k2, k3, k4 = st.columns(4)
         
-        # 依據選擇，從 CSV 撈取特定參數
-        capex_unit = 0
-        life_year = 5
-        opex_unit = 0
-        x_label = ""
-        sim_range = range(0, 1)
+        k1.metric(
+            "預估年營收", 
+            f"${int(ov['total_revenue']/10000):,} 萬", 
+            help="全年總產出株數 x 市場行情單價"
+        )
         
-        if "Fans" in target_sys:
-            fan_price = float(COST_DB.get('Fan_Unit_Price', 16000))
-            fan_life = float(COST_DB.get('Fan_Life_Year', 5))
-            fan_power = st.session_state.get('sel_fan_power', 1000.0)
-            
-            st.info(f"📋 參數來源：\n• 單價: ${fan_price:,.0f} (Fan_Unit_Price)\n• 年限: {fan_life} 年")
-            
-            unit_price = st.number_input("設備單價 ($/台)", value=fan_price)
-            life_year = st.number_input("折舊年限 (年)", value=fan_life)
-            
-            capex_unit = unit_price / life_year # 年攤提
-            opex_unit = (fan_power / 1000) * run_hours * elec_rate # 年電費
-            
-            sim_range = range(0, 50, 2) # 0~50台
-            x_label = "風扇數量 (台)"
-            
-        elif "Shading" in target_sys:
-            net_price = float(COST_DB.get('Net_Unit_Price', 60))
-            net_life = float(COST_DB.get('Net_Life_Year', 3))
-            
-            st.info(f"📋 參數來源：\n• 單價: ${net_price:,.0f}/m² (Net_Unit_Price)\n• 年限: {net_life} 年")
-            
-            unit_price = st.number_input("每 m² 成本 ($)", value=net_price)
-            life_year = st.number_input("折舊年限 (年)", value=net_life)
-            
-            # 遮蔭網總價 = 面積 * 遮蔭率 * 單價
-            # 這裡計算「每 1% 遮蔭率」的年成本係數
-            floor_area = gh_specs['width'] * gh_specs['length']
-            capex_unit = (floor_area * unit_price / 100) / life_year
-            opex_unit = 0 # 遮蔭網無運轉電費
-            
-            sim_range = range(0, 100, 10)
-            x_label = "遮蔭率 (%)"
-            
-        elif "Vents" in target_sys:
-            vent_price = float(COST_DB.get('Vent_Structure_Price', 4500))
-            vent_life = float(COST_DB.get('Structure_Life_Year', 15))
-            
-            st.info(f"📋 參數來源：\n• 結構單價: ${vent_price:,.0f}/m²\n• 年限: {vent_life} 年")
-            
-            unit_price = st.number_input("結構造價 ($/m²)", value=vent_price)
-            life_year = st.number_input("折舊年限 (年)", value=vent_life)
-            
-            capex_unit = unit_price / life_year
-            opex_unit = 0 # 自然通風無電費
-            
-            max_area = int(gh_specs['width'] * gh_specs['length'])
-            step = max(1, int(max_area/10))
-            sim_range = range(0, max_area, step)
-            x_label = "天窗面積 (m²)"
+        k2.metric(
+            "變動成本 (COGS)", 
+            f"${int(ov['total_var_cost']/10000):,} 萬", 
+            delta="-種子/介質/人工", 
+            delta_color="inverse",
+            help="隨產量增加的成本"
+        )
+        
+        k3.metric(
+            "折舊 (Fixed)", 
+            f"${int(ov['total_fixed_cost']/10000):,} 萬", 
+            delta="-折舊", 
+            delta_color="inverse",
+            help="不生產也要付的成本 (折舊)"
+        )
+        
+        # 顯示 ROI
+        roi_color = "normal" if ov['net_profit'] > 0 else "inverse"
+        k4.metric(
+            "稅前淨利 (Net Profit)", 
+            f"${int(ov['net_profit']/10000):,} 萬", 
+            delta=f"ROI {ov['roi']}%",
+            delta_color=roi_color
+        )
 
-        elif "Fogging" in target_sys:
-            fog_sys_price = float(COST_DB.get('Fog_System_Price', 15))
-            pump_life = float(COST_DB.get('Pump_Life_Year', 7))
-            water_rate = float(COST_DB.get('Water_Rate', 12.0))
-            
-            st.info(f"📋 參數來源：\n• 系統單價: ${fog_sys_price}/(g/m²)\n• 水費: ${water_rate}/度")
-            
-            unit_price = st.number_input("系統造價 ($/單位流量)", value=fog_sys_price)
-            life_year = st.number_input("設備年限 (年)", value=pump_life)
-            
-            # 這裡比較複雜，隨流量變動
-            sim_range = range(0, 600, 20)
-            x_label = "噴霧流量 (g/m²/hr)"
+        st.info(f"⚡ **最大產能分析**：以您的溫室規模，全速運轉時單批次可生產 **{int(ov['max_capacity_per_batch']):,} 株** 苗。")
 
-    # --- 右側：執行運算 ---
-    with col_opt2:
-        if st.button("🚀 開始 ROI 分析", type="primary", use_container_width=True):
-            results = []
-            floor_area = gh_specs['width'] * gh_specs['length']
+        # --- B. 圖表分析區 ---
+        st.subheader("📊 財務結構分析")
+        
+        tab_chart1, tab_chart2 = st.tabs(["每月收支趨勢", "成本結構分析"])
+        
+        with tab_chart1:
+            # 準備畫圖資料
+            chart_df = pd.DataFrame(monthly_data)
             
-            with st.spinner("正在進行邊際效益模擬..."):
-                for val in sim_range:
-                    tmp_gh = gh_specs.copy()
-                    tmp_fan = fan_specs.copy()
-                    cost_annual = 0
-                    
-                    # 套用變數
-                    if "Fans" in target_sys:
-                        tmp_fan['exhaustCount'] = val
-                        cost_annual = val * (capex_unit + opex_unit)
-                    elif "Shading" in target_sys:
-                        tmp_gh['shadingScreen'] = val
-                        cost_annual = val * capex_unit
-                    elif "Vents" in target_sys:
-                        tmp_gh['roofVentArea'] = val
-                        cost_annual = val * capex_unit
-                    elif "Fogging" in target_sys:
-                        tmp_gh['_fog_capacity'] = val
-                        # 噴霧成本 = 設備折舊 + 水費 + 電費
-                        total_flow_g = val * floor_area
-                        capex = (total_flow_g * unit_price) / life_year
-                        
-                        water_ton = (total_flow_g * run_hours) / 1_000_000
-                        water_cost = water_ton * water_rate
-                        elec_cost = (total_flow_g * 0.005) * run_hours * elec_rate / 1000 # 假設泵浦能耗
-                        cost_annual = capex + water_cost + elec_cost
+            # 🛑 新增檢查：如果資料表是空的，顯示提示訊息，不要畫圖
+            if chart_df.empty:
+                st.warning("⚠️ 目前沒有模擬數據可供繪圖 (可能是作物資料對應失敗)。")
+            else:
+                # 為了讓圖表好看，設定一下 Index (如果需要) 或直接畫
+                st.bar_chart(
+                    chart_df, 
+                    x='month', 
+                    y=['revenue', 'var_cost', 'fixed_cost'],
+                    color=['#2ecc71', '#ff6b6b', '#ffa502'], 
+                    stack=False 
+                )
+                st.caption("綠色：營收 / 紅色：變動成本 / 橘色：固定成本")
 
-                    # 模擬營收
-                    res = SimulationService.run_simulation(
-                        tmp_gh, tmp_fan, CURR_LOC['data'], 
-                        st.session_state.monthly_crops, st.session_state.planting_density, 
-                        st.session_state.annual_cycles, st.session_state.market_prices, 
-                        CROP_DB, MAT_DB
-                    )
-                    
-                    revenue = res['totalRevenue']
-                    # 淨利 = 營收 - (變動成本 + 此設備的額外成本)
-                    # 為了簡化比較，我們假設其他成本不變，只看邊際變化
-                    # 所以這裡的 "Net Benefit" 是 (總營收 - 此項設備總年費)
-                    marginal_profit = revenue - cost_annual
-                    
-                    results.append({
-                        "Value": val, "Revenue": revenue, "Cost": cost_annual, "Profit": marginal_profit
-                    })
+        with tab_chart2:
+            # 圓餅圖：錢都花去哪了？
+            import plotly.express as px # 如果沒有 plotly 可以改用 st.bar_chart
             
-            # 繪圖
-            df_opt = pd.DataFrame(results)
-            best_row = df_opt.loc[df_opt['Profit'].idxmax()]
+            cost_dist = pd.DataFrame({
+                'Cost Type': ['運行成本 (資材/種子)', '折舊)'],
+                'Amount': [ov['total_var_cost'], ov['total_fixed_cost']]
+            })
             
-            st.success(f"🏆 最佳配置點：**{int(best_row['Value'])}** {x_label.split('(')[0]}，預估淨效益 **${int(best_row['Profit']):,}**")
-            
-            fig_opt = make_subplots(specs=[[{"secondary_y": True}]])
-            
-            # 淨利曲線 (最重要的指標)
-            fig_opt.add_trace(go.Scatter(
-                x=df_opt['Value'], y=df_opt['Profit'], name="淨效益 (Revenue-Cost)",
-                mode='lines', line=dict(color='#22c55e', width=4), fill='tozeroy', fillcolor='rgba(34, 197, 94, 0.15)'
-            ), secondary_y=False)
-            
-            # 成本曲線 (紅色)
-            fig_opt.add_trace(go.Scatter(
-                x=df_opt['Value'], y=df_opt['Cost'], name="投入成本 (Cost)",
-                mode='lines', line=dict(color='#ef4444', width=2, dash='dot')
-            ), secondary_y=False)
-            
-            # 營收曲線 (藍色)
-            fig_opt.add_trace(go.Scatter(
-                x=df_opt['Value'], y=df_opt['Revenue'], name="總營收 (Revenue)",
-                mode='lines', line=dict(color='#3b82f6', width=2, dash='dash')
-            ), secondary_y=True) # 放右軸，避免數值差異太大擠壓圖形
+            fig = px.pie(cost_dist, values='Amount', names='Cost Type', title='年度成本分佈', hole=0.4)
+            st.plotly_chart(fig, use_container_width=True)
 
-            fig_opt.update_layout(
-                title=f"{target_sys} 投資效益分析",
-                template="plotly_dark", hovermode="x unified", height=450,
-                xaxis_title=x_label,
-                legend=dict(orientation="h", y=1.1)
-            )
-            fig_opt.update_yaxes(title_text="效益/成本 ($)", secondary_y=False)
-            fig_opt.update_yaxes(title_text="總營收 ($)", secondary_y=True, showgrid=False)
-            
-            st.plotly_chart(fig_opt, use_container_width=True)
-            
-            with st.expander("詳細數據"):
-                st.dataframe(df_opt.style.format("{:,.0f}"))
+        # --- C. 詳細數據表格 ---
+        st.subheader("📅 年度生產與損益排程表")
+        
+        detail_df = pd.DataFrame(monthly_data)
+        
+        # 整理顯示欄位
+        display_cols = ['month', 'season', 'crop', 'production', 'revenue', 'var_cost', 'fixed_cost', 'net_profit', 'margin']
+        display_df = detail_df[display_cols].copy()
+        
+        # 欄位中文化
+        display_df.columns = ['月份', '季節', '生產作物', '產量(株)', '營收($)', '變動成本($)', '固定成本($)', '淨利($)', '淨利率(%)']
+        
+        st.dataframe(
+            display_df,
+            column_config={
+                "月份": st.column_config.NumberColumn(format="%d月"),
+                "產量(株)": st.column_config.NumberColumn(format="%d"),
+                "營收($)": st.column_config.NumberColumn(format="$%d"),
+                "變動成本($)": st.column_config.NumberColumn(format="$%d"),
+                "固定成本($)": st.column_config.NumberColumn(format="$%d"),
+                "淨利($)": st.column_config.ProgressColumn(
+                    format="$%d", 
+                    min_value=int(display_df['淨利($)'].min()), 
+                    max_value=int(display_df['淨利($)'].max())
+                ),
+                "淨利率(%)": st.column_config.NumberColumn(format="%.1f%%"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+    else:
+        st.error("模擬失敗，無法取得育苗數據。請確認作物資料是否完整 (CSV)。")

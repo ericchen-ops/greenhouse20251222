@@ -2,11 +2,23 @@ import os
 import pandas as pd
 
 class ResourceService:
-    def __init__(self, data_root='data'):
-        self.data_root = data_root
+    def __init__(self, data_path):
+        # ✅ 修改前：
+        # self.cost_df = pd.read_csv(f"{data_path}/cost_parameters.csv", encoding='utf-8-sig')
+
+        # ✅ 修改後：使用 os.path.join 自動處理斜線
+        csv_path = os.path.join(data_path, 'cost_parameters.csv')
+        
+        # 加入檢查機制，告訴您程式到底在找哪裡
+        if not os.path.exists(csv_path):
+            print(f"❌ 嚴重錯誤：找不到檔案！程式預期路徑為：{csv_path}")
+            # 這裡可以選擇拋出錯誤或建立空 DataFrame
+            self.cost_df = pd.DataFrame() 
+        else:
+            self.cost_df = pd.read_csv(csv_path, encoding='utf-8-sig')
 
     def load_crop_database(self, filename='crops.csv'):
-        path = os.path.join(self.data_root, filename)
+        path = os.path.join(self.data_path, filename)
         # 預設作物資料
         default = {'lettuce': {'id': 'lettuce', 'name': '萵苣', 'idealTemp': 20, 'tempTolerance': 6, 'baseWeight': 0.35, 'cycleDays': 45, 'lightSaturation': 11, 'lightSlope': 1.2, 'price': 45}}
         
@@ -20,7 +32,7 @@ class ResourceService:
     # ★★★ 修正重點 1: 專門讀取材料並回傳 Dictionary ★★★
     def load_material_database(self, filename='greenhouse_materials.csv'):
         # 組合路徑: data/equipment_data/greenhouse_materials.csv
-        path = os.path.join(self.data_root, filename)
+        path = os.path.join(self.data_path, filename)
         
         # 預設值 (字典格式)
         default = {'glass': {'label': '散射玻璃 (Glass) - 預設', 'trans': 0.9, 'uValue': 5.8}}
@@ -61,7 +73,7 @@ class ResourceService:
 
     # ★★★ 修正重點 2: 通用設備讀取 (回傳 DataFrame) ★★★
     def load_equipment_csv(self, folder_name, filename, eq_type='fan', filter_col=None, filter_val=None):
-        path = os.path.join(self.data_root, folder_name, filename)
+        path = os.path.join(self.data_path, folder_name, filename)
         
         if not os.path.exists(path): 
             return pd.DataFrame() # 找不到檔案回傳空表格
@@ -96,7 +108,7 @@ class ResourceService:
         """
         讀取成本參數 CSV 並轉為字典，方便用 Key 查詢數值
         """
-        path = os.path.join(self.data_root, filename)
+        path = os.path.join(self.data_path, filename)
         default_costs = {}
         
         if os.path.exists(path):
@@ -111,3 +123,57 @@ class ResourceService:
                 
         return default_costs
 
+
+    def __init__(self, data_path):
+        self.cost_df = pd.read_csv(f"{data_path}/cost_parameters.csv", encoding='utf-8-sig')
+        
+        self.data_path = data_path 
+        
+        # 接著才是原本的讀取邏輯
+        self.csv_path = os.path.join(data_path, 'cost_parameters.csv')
+
+    def calculate_costs(self, crop_type, gh_area_m2):
+        """
+        根據作物類型 (crop_type) 過濾適用設備，並計算總部與加盟主的拆帳
+        """
+        # 1. 標籤過濾：只選取 "All" 或者 "符合當前作物" 的項目
+        # 例如：如果 crop_type 是 'Strawberry' (草莓)，會抓到 'All', 'Soil', 'Berry' 標籤
+        # 這裡做簡單字串比對，實際可寫更複雜
+        def is_applicable(tags):
+            tags_list = tags.split(',')
+            return 'All' in tags_list or crop_type in tags_list
+
+        # 篩選出適用的成本項目
+        df_filtered = self.cost_df[self.cost_df['Applicable_Tags'].apply(is_applicable)].copy()
+
+        # 2. 計算總金額 (Value * 數量)
+        # 注意：這裡只是簡化範例，實際計算需依 Item 判斷 (有些是單價/m2，有些是/unit)
+        # 您原本的程式應該有處理這段 "Unit" 的邏輯，這裡假設我們已算出 'Total_Amount'
+        
+        # --- 模擬計算邏輯 (請替換回您原本的詳細運算) ---
+        df_filtered['Calculated_Cost'] = 0
+        for index, row in df_filtered.iterrows():
+            if row['Unit'] == 'NTD/m2':
+                df_filtered.at[index, 'Calculated_Cost'] = row['Value'] * gh_area_m2
+            elif row['Unit'] == 'NTD/unit': 
+                # 假設每 200m2 需要一台
+                count = max(1, gh_area_m2 / 200) 
+                df_filtered.at[index, 'Calculated_Cost'] = row['Value'] * count
+            # ... 其他單位邏輯 ...
+
+        # 3. 核心修改：依 Payer (支付者) 進行 GroupBy 分組加總
+        summary = df_filtered.groupby(['Type', 'Payer'])['Calculated_Cost'].sum().unstack(fill_value=0)
+        
+        # 轉換成容易讀取的字典
+        return {
+            'Headquarters': {
+                'CAPEX': summary.get('Headquarters', {}).get('CAPEX', 0),
+                'OPEX': summary.get('Headquarters', {}).get('OPEX', 0),
+                'Depreciation': summary.get('Headquarters', {}).get('Depreciation', 0)
+            },
+            'Franchisee': {
+                'CAPEX': summary.get('Franchisee', {}).get('CAPEX', 0), # 加盟主通常 CAPEX 少
+                'OPEX': summary.get('Franchisee', {}).get('OPEX', 0),   # 加盟主負責營運
+                'Depreciation': summary.get('Franchisee', {}).get('Depreciation', 0)
+            }
+        }

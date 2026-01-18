@@ -1,0 +1,5 @@
+id,name,idealTemp,tempTolerance,baseWeight,cycleDays,lightSaturation,lightSlope,price
+lettuce,萵苣,20,6,0.35,45,11,1.2,45
+cabbage,小白菜,25,8,0.15,28,10,0.8,35
+spinach,蕹菜,28,10,0.25,25,12,1.0,30
+tomato,小番茄,23,8,0.6,60,14,1.5,120
